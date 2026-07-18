@@ -1,4 +1,4 @@
-[workspace]
+﻿[workspace]
 resolver = "2"
 members = [
     "src-tauri",
@@ -9,15 +9,18 @@ members = [
     "crates/scheduler",
     "crates/rule-engine",
     "crates/threat-intel",
+    "crates/stix-taxii",
     "crates/crypto-vault",
     "crates/action-executor",
     "crates/state-store",
     "crates/audit-log",
     "crates/siem",
+    "crates/siem-export",
     "crates/automation",
     "crates/ai-engine",
     "crates/compliance",
     "crates/forensic",
+    "crates/rest-api",
     "crates/network-stack/firewall",
     "crates/network-stack/dns-proxy",
     "crates/network-stack/tls-inspect",
@@ -93,7 +96,11 @@ members = [
     "crates/modules/privacy/tracker-block",
     "crates/modules/privacy/metadata-min",
     "crates/modules/privacy/vpn-tor",
-]
+    "crates/fleet-management",
+    "crates/forensic-triage",
+    "crates/active-response",
+    "crates/mitre-attack",
+    "crates/vuln-management",]
 
 [workspace.package]
 version = "0.1.0"
@@ -276,3 +283,4 @@ split-debuginfo = "unpacked"
 [profile.bench]
 opt-level = 3
 lto = "thin"
+

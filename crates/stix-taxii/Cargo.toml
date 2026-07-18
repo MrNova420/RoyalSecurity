@@ -1,0 +1,18 @@
+[package]
+name = "royalsecurity-stix-taxii"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+royalsecurity-common = { path = "../common" }
+royalsecurity-threat-intel = { path = "../threat-intel" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+tracing = "0.1"
+axum = "0.7"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
