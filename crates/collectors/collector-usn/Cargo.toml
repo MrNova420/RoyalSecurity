@@ -1,0 +1,16 @@
+﻿[package]
+name = "royalsecurity-collector-usn"
+version.workspace = true
+edition.workspace = true
+description = "Telemetry collector: collector-usn"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = "../../core" }
+royalsecurity-common = { path = "../../common" }
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+

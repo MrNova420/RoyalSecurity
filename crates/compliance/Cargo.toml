@@ -1,0 +1,14 @@
+﻿[package]
+name = "royalsecurity-compliance"
+version.workspace = true
+edition.workspace = true
+description = "CIS, STIG, NIST, ISO, PCI, HIPAA, GDPR compliance checkers"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+

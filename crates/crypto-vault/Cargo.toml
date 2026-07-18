@@ -1,0 +1,22 @@
+﻿[package]
+name = "royalsecurity-crypto-vault"
+version.workspace = true
+edition.workspace = true
+description = "Key management, TPM, HSM, rotation, Shamir secret sharing"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+aes-gcm.workspace = true
+chacha20poly1305.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+rand.workspace = true
+ring.workspace = true
+ed25519-dalek.workspace = true
+serde.workspace = true
+tracing.workspace = true
+base64.workspace = true
+hex.workspace = true
+

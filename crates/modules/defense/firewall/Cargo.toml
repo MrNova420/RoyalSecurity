@@ -1,0 +1,17 @@
+﻿[package]
+name = "royalsecurity-defense-firewall"
+version.workspace = true
+edition.workspace = true
+description = "Defense module: Host firewall: WFP rules, default-deny, per-process rules"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = "../../../core" }
+royalsecurity-common = { path = "../../../common" }
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

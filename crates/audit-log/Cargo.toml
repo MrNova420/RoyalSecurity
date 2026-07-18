@@ -1,0 +1,17 @@
+﻿[package]
+name = "royalsecurity-audit-log"
+version.workspace = true
+edition.workspace = true
+description = "Immutable hash-chained audit log, TPM-sealed"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+tracing.workspace = true
+sha3.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+

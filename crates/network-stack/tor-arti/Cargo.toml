@@ -1,0 +1,18 @@
+﻿[package]
+name = "royalsecurity-network-tor-arti"
+version.workspace = true
+edition.workspace = true
+description = "Network stack: Embedded Tor Arti client: SOCKS5, TransPort, bridges, circuit control"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = "../../core" }
+royalsecurity-common = { path = "../../common" }
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+socket2.workspace = true
+

@@ -1,0 +1,71 @@
+﻿[general]
+app_name = "RoyalSecurity"
+version = "0.1.0"
+license_key = ""
+telemetry_enabled = true
+auto_update = true
+
+[agent]
+run_as_service = true
+heartbeat_interval_secs = 5
+max_memory_mb = 256
+max_cpu_percent = 5.0
+watchdog_enabled = true
+self_protection = true
+
+[defense]
+av_enabled = true
+edr_enabled = true
+xdr_enabled = true
+behavior_enabled = true
+asr_enabled = true
+ransomware_enabled = true
+memory_protection = true
+exploit_protection = true
+credential_protection = true
+device_control = true
+deception_enabled = true
+
+[network]
+firewall_enabled = true
+dns_proxy_enabled = true
+dns_over_https = true
+vpn_enabled = true
+tor_enabled = false
+leak_protection = true
+tls_inspection = false
+web_protection = true
+
+[privacy]
+anti_fingerprint = true
+tracker_blocking = true
+metadata_minimization = true
+
+[logging]
+level = "info"
+format = "json"
+file_output = true
+console_output = true
+max_file_size_mb = 100
+retention_days = 90
+
+[threat_intel]
+enabled = true
+update_interval_minutes = 15
+feeds = []
+local_cache_enabled = true
+
+[compliance]
+enabled = true
+frameworks = ["CIS", "STIG"]
+auto_remediate = false
+
+[forensics]
+enabled = true
+max_artifacts = 10000
+auto_collection = true
+
+[automation]
+enabled = true
+max_playbooks = 100
+http_actions_enabled = true

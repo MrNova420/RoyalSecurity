@@ -1,0 +1,18 @@
+﻿[package]
+name = "royalsecurity-common"
+version.workspace = true
+edition.workspace = true
+description = "Shared types, errors, MITRE ATT&CK mappings, constants"
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+strum.workspace = true
+strum_macros.workspace = true
+toml.workspace = true
+blake3.workspace = true

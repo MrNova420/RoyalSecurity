@@ -1,0 +1,21 @@
+﻿[package]
+name = "royalsecurity-threat-intel"
+version.workspace = true
+edition.workspace = true
+description = "IOC feed parser, matcher, STIX/TAXII, MISP integration"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+tokio.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+bloomfilter.workspace = true
+aho-corasick.workspace = true
+hex.workspace = true
+chrono.workspace = true
+regex.workspace = true
+

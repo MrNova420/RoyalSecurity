@@ -1,0 +1,17 @@
+﻿[package]
+name = "royalsecurity-privacy-tracker-block"
+version.workspace = true
+edition.workspace = true
+description = "Privacy module: System-wide tracker and ad blocking: WFP + DNS + uBlock engine"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = "../../../core" }
+royalsecurity-common = { path = "../../../common" }
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

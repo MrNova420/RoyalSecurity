@@ -1,0 +1,14 @@
+﻿[package]
+name = "royalsecurity-action-executor"
+version.workspace = true
+edition.workspace = true
+description = "Response actions: block, quarantine, kill, isolate, rollback"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+tokio.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+

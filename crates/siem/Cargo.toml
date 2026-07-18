@@ -1,0 +1,17 @@
+﻿[package]
+name = "royalsecurity-siem"
+version.workspace = true
+edition.workspace = true
+description = "Log ingestion, normalization, tiered storage, query engine"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+royalsecurity-state-store = { path = '../state-store' }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+

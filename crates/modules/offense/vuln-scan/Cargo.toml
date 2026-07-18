@@ -1,0 +1,17 @@
+﻿[package]
+name = "royalsecurity-offense-vuln-scan"
+version.workspace = true
+edition.workspace = true
+description = "Offense module: Local vulnerability scanner: software inventory, CVE match, EPSS scoring"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = "../../../core" }
+royalsecurity-common = { path = "../../../common" }
+tokio.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

@@ -1,0 +1,15 @@
+﻿[package]
+name = "royalsecurity-scheduler"
+version.workspace = true
+edition.workspace = true
+description = "Task scheduler: cron + event-triggered + priority queue"
+license.workspace = true
+
+[dependencies]
+royalsecurity-core = { path = '../core' }
+royalsecurity-common = { path = '../common' }
+tokio.workspace = true
+cron.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
