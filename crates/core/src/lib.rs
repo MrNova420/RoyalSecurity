@@ -1,4 +1,4 @@
-﻿pub mod arena;
+pub mod arena;
 pub mod bus;
 pub mod config;
 pub mod crypto;
@@ -8,6 +8,7 @@ pub mod module;
 pub mod ppl;
 pub mod registry;
 pub mod tpm;
+pub mod engine;
 
 pub use royalsecurity_common as common;
 pub use bus::*;
@@ -17,6 +18,7 @@ pub use audit::*;
 pub use module::*;
 pub use registry::*;
 pub use tpm::*;
+pub use engine::*;
 
 #[cfg(test)]
 mod tests {
@@ -30,12 +32,12 @@ mod tests {
     fn test_event_bus_publish_subscribe() {
         let bus = EventBus::new();
         let mut rx = bus.subscribe();
-        
+
         let event = royalsecurity_common::types::SecurityEvent::Process(
             royalsecurity_common::types::ProcessInfo::default(),
         );
         bus.publish(event).unwrap();
-        
+
         let received = rx.try_recv();
         assert!(received.is_ok(), "Should receive published event");
     }
@@ -52,11 +54,11 @@ mod tests {
     fn test_crypto_vault_encrypt_decrypt_aes() {
         let mut vault = CryptoVault::new();
         vault.generate_key("test", crate::crypto::KeyAlgorithm::Aes256Gcm);
-        
+
         let plaintext = b"Hello, RoyalSecurity!";
         let encrypted = vault.encrypt_aes256(plaintext, "test").unwrap();
         assert_ne!(encrypted, plaintext);
-        
+
         let decrypted = vault.decrypt_aes256(&encrypted, "test").unwrap();
         assert_eq!(decrypted, plaintext);
     }
@@ -65,11 +67,11 @@ mod tests {
     fn test_crypto_vault_encrypt_decrypt_chacha() {
         let mut vault = CryptoVault::new();
         vault.generate_key("chacha-test", crate::crypto::KeyAlgorithm::ChaCha20Poly1305);
-        
+
         let plaintext = b"ChaCha20-Poly1305 encryption test";
         let encrypted = vault.encrypt_chacha20(plaintext, "chacha-test").unwrap();
         assert_ne!(encrypted, plaintext);
-        
+
         let decrypted = vault.decrypt_chacha20(&encrypted, "chacha-test").unwrap();
         assert_eq!(decrypted, plaintext);
     }
@@ -78,10 +80,10 @@ mod tests {
     fn test_crypto_vault_key_rotation() {
         let mut vault = CryptoVault::new();
         vault.generate_key("rotating", crate::crypto::KeyAlgorithm::Aes256Gcm);
-        
+
         let key = vault.rotate_key("rotating").unwrap();
         assert_eq!(key.rotated_count, 1);
-        
+
         let key = vault.rotate_key("rotating").unwrap();
         assert_eq!(key.rotated_count, 2);
     }
@@ -98,10 +100,10 @@ mod tests {
     #[test]
     fn test_audit_log_record_and_verify() {
         let mut audit = AuditLog::new();
-        
+
         let mut details = HashMap::new();
         details.insert("test".into(), serde_json::json!("value"));
-        
+
         audit.record("test.action", "system", "target", details);
         assert_eq!(audit.count(), 1);
         assert!(audit.verify_chain(), "Chain should be valid after recording");
@@ -110,13 +112,13 @@ mod tests {
     #[test]
     fn test_audit_log_chain_integrity() {
         let mut audit = AuditLog::new();
-        
+
         for i in 0..10 {
             let mut details = HashMap::new();
             details.insert("index".into(), serde_json::json!(i));
             audit.record(&format!("action.{}", i), "system", "target", details);
         }
-        
+
         assert_eq!(audit.count(), 10);
         assert!(audit.verify_chain(), "Chain should be valid with 10 entries");
     }

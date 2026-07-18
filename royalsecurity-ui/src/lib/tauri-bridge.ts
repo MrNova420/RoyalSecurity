@@ -137,6 +137,7 @@ export interface Config {
   auto_isolate?: boolean;
   telemetry_enabled?: boolean;
   max_cpu_percent?: number;
+  first_run?: boolean;
   [key: string]: unknown;
 }
 

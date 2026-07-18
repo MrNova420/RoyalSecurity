@@ -293,176 +293,74 @@ impl YaraEngine {
     }
 
     pub fn load_default_rules(&mut self) {
-        let defaults = vec![
-            YaraRule {
-                id: "yar-001".into(),
-                name: "Ransomware File Extensions".into(),
-                description: "Detects common ransomware encrypted file extensions".into(),
-                severity: EventSeverity::Critical,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["ransomware".into(), "malware".into()],
-                strings: vec![
-                    YaraString { identifier: "$ext1".into(), value: ".encrypted".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$ext2".into(), value: ".locked".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$ext3".into(), value: ".crypto".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                ],
-                condition: "$ext1 or $ext2 or $ext3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-002".into(),
-                name: "Ransomware Note Keywords".into(),
-                description: "Detects common ransomware note text patterns".into(),
-                severity: EventSeverity::Critical,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["ransomware".into(), "malware".into()],
-                strings: vec![
-                    YaraString { identifier: "$note1".into(), value: "Your files have been encrypted".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$note2".into(), value: "decrypt your files".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$note3".into(), value: "bitcoin wallet".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                ],
-                condition: "$note1 or ($note2 and $note3)".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-003".into(),
-                name: "Mimikatz Credential Dumping".into(),
-                description: "Detects Mimikatz credential dumping patterns".into(),
-                severity: EventSeverity::Critical,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["credential".into(), "lateral-movement".into(), "mimikatz".into()],
-                strings: vec![
-                    YaraString { identifier: "$m1".into(), value: "mimikatz".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$m2".into(), value: "sekurlsa::logonpasswords".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$m3".into(), value: "lsadump::sam".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                ],
-                condition: "$m1 or $m2 or $m3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-004".into(),
-                name: "Credential File Patterns".into(),
-                description: "Detects patterns related to credential theft".into(),
-                severity: EventSeverity::High,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["credential".into(), "theft".into()],
-                strings: vec![
-                    YaraString { identifier: "$c1".into(), value: "SAM".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$c2".into(), value: "SYSTEM".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$c3".into(), value: "ntds.dit".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                ],
-                condition: "$c1 and $c2 and $c3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-005".into(),
-                name: "Suspicious PowerShell Commands".into(),
-                description: "Detects suspicious PowerShell command patterns".into(),
-                severity: EventSeverity::High,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["powershell".into(), "execution".into(), "suspicious".into()],
-                strings: vec![
-                    YaraString { identifier: "$ps1".into(), value: "Invoke-Expression".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$ps2".into(), value: "IEX".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$ps3".into(), value: "DownloadString".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$ps4".into(), value: "bypass".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                ],
-                condition: "$ps1 or $ps2 or ($ps3 and $ps4)".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-006".into(),
-                name: "Script Obfuscation Patterns".into(),
-                description: "Detects common script obfuscation techniques".into(),
-                severity: EventSeverity::High,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["obfuscation".into(), "script".into(), "malware".into()],
-                strings: vec![
-                    YaraString { identifier: "$o1".into(), value: "eval(".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$o2".into(), value: "fromCharCode".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$o3".into(), value: "Base64".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$o4".into(), value: "charCodeAt".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                ],
-                condition: "$o1 and ($o2 or $o3 or $o4)".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-007".into(),
-                name: "PsExec Lateral Movement".into(),
-                description: "Detects PsExec-based lateral movement".into(),
-                severity: EventSeverity::High,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["lateral-movement".into(), "psexec".into(), "remote".into()],
-                strings: vec![
-                    YaraString { identifier: "$px1".into(), value: "psexec".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$px2".into(), value: "\\\\IPC$".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$px3".into(), value: "PsExec".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                ],
-                condition: "$px1 or $px2 or $px3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-008".into(),
-                name: "WMI Lateral Movement".into(),
-                description: "Detects WMI-based lateral movement".into(),
-                severity: EventSeverity::High,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["lateral-movement".into(), "wmi".into(), "remote".into()],
-                strings: vec![
-                    YaraString { identifier: "$w1".into(), value: "Win32_Process".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$w2".into(), value: "Create".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$w3".into(), value: "wmic".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                ],
-                condition: "($w1 and $w2) or $w3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-009".into(),
-                name: "Reverse Shell Patterns".into(),
-                description: "Detects common reverse shell code patterns".into(),
-                severity: EventSeverity::Critical,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["shell".into(), "backdoor".into(), "malware".into()],
-                strings: vec![
-                    YaraString { identifier: "$sh1".into(), value: "cmd.exe /c".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] },
-                    YaraString { identifier: "$sh2".into(), value: "/bin/sh".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$sh3".into(), value: "socket".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                ],
-                condition: "$sh1 or $sh2 or $sh3".into(),
-                enabled: true,
-            },
-            YaraRule {
-                id: "yar-010".into(),
-                name: "Registry Persistence".into(),
-                description: "Detects registry-based persistence mechanisms".into(),
-                severity: EventSeverity::Medium,
-                author: "RoyalSecurity".into(),
-                date: "2024-01-01".into(),
-                tags: vec!["persistence".into(), "registry".into()],
-                strings: vec![
-                    YaraString { identifier: "$reg1".into(), value: "CurrentVersion\\Run".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$reg2".into(), value: "CurrentVersion\\RunOnce".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$reg3".into(), value: "Winlogon\\Shell".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                    YaraString { identifier: "$reg4".into(), value: "Winlogon\\Userinit".into(), string_type: YaraStringType::Text, modifiers: vec![] },
-                ],
-                condition: "$reg1 or $reg2 or $reg3 or $reg4".into(),
-                enabled: true,
-            },
+        let rules = vec![
+            // -- Malware Families --
+            YaraRule { id: "malware_emotet".into(), name: "Emotet Banker".into(), description: "Detects Emotet banking trojan indicators".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "emotet".into(), "banker".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "HRMLcZl1".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "clb.dll".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "http://".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_trickbot".into(), name: "TrickBot".into(), description: "Detects TrickBot malware patterns".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "trickbot".into(), "banker".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "GroupPolicy".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "ModulesConfig".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "InjectDll".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_ryuk".into(), name: "Ryuk Ransomware".into(), description: "Detects Ryuk ransomware".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "ransomware".into(), "ryuk".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "UNIQUE_ID_FOR_DECRYPTOR".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "3.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "app_config.json".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_conti".into(), name: "Conti Ransomware".into(), description: "Detects Conti ransomware".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "ransomware".into(), "conti".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "CONTI_README".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "polices are expired".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_lockbit".into(), name: "LockBit Ransomware".into(), description: "Detects LockBit ransomware".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "ransomware".into(), "lockbit".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "lockbit".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "All your files are stolen".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: ".lockbit".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_cobalt_strike".into(), name: "Cobalt Strike Beacon".into(), description: "Detects Cobalt Strike beacon artifacts".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "cobalt_strike".into(), "c2".into(), "mitre:T1071".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "beacon.dll".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "%d is an x86 OR x64 bit OS".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "api.php?f=id".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "\\pipe\\msagent_*".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_mimikatz".into(), name: "Mimikatz Credential Dump".into(), description: "Detects Mimikatz credential harvesting tool".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "mimikatz".into(), "credentials".into(), "mitre:T1003".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "gentilkiwi".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "mimidrv".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "mimilib".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "sekurlsa::logonpasswords".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_qakbot".into(), name: "QakBot".into(), description: "Detects QakBot/QBot malware".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "qakbot".into(), "banker".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "C:\\ProgramData\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "\\AppData\\Local\\Temp\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*) and filesize < 2MB".into(), enabled: true },
+            YaraRule { id: "malware_icedid".into(), name: "IcedID Loader".into(), description: "Detects IcedID/BokBot loader".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "icedid".into(), "loader".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "license.dat".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "GET /sync=".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_dridex".into(), name: "Dridex".into(), description: "Detects Dridex banking trojan".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "dridex".into(), "banker".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "GroupTag".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "SessionLoader".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            YaraRule { id: "malware_formbook".into(), name: "Formbook".into(), description: "Detects Formbook/Agent Tesla info stealer".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["malware".into(), "formbook".into(), "stealer".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "xClient".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "klg_hk".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            // -- Process Injection --
+            YaraRule { id: "inject_createremotethread".into(), name: "Process Injection - CreateRemoteThread".into(), description: "Detects CreateRemoteThread API usage for process injection".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["injection".into(), "mitre:T1055".into()], strings: vec![YaraString { identifier: "$api1".into(), value: "CreateRemoteThread".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api2".into(), value: "VirtualAllocEx".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api3".into(), value: "WriteProcessMemory".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($api*)".into(), enabled: true },
+            YaraRule { id: "inject_process_hollowing".into(), name: "Process Hollowing".into(), description: "Detects process hollowing indicators".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["injection".into(), "mitre:T1055.012".into()], strings: vec![YaraString { identifier: "$api1".into(), value: "NtUnmapViewOfSection".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api2".into(), value: "ZwUnmapViewOfSection".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api3".into(), value: "SetThreadContext".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($api*)".into(), enabled: true },
+            YaraRule { id: "inject_apc_queue".into(), name: "APC Queue Injection".into(), description: "Detects APC injection via QueueUserAPC".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["injection".into(), "mitre:T1055".into()], strings: vec![YaraString { identifier: "$api1".into(), value: "QueueUserAPC".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api2".into(), value: "NtQueueApcThread".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($api*)".into(), enabled: true },
+            YaraRule { id: "inject_reflective_dll".into(), name: "Reflective DLL Loading".into(), description: "Detects reflective DLL injection patterns".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["injection".into(), "mitre:T1620".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "ReflectiveLoader".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "0xE8A3".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "inject_appinit_dlls".into(), name: "AppInit_DLLs Persistence".into(), description: "Detects AppInit_DLLs registry modification for persistence".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["persistence".into(), "mitre:T1546.010".into()], strings: vec![YaraString { identifier: "$reg".into(), value: "AppInit_DLLs".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$reg2".into(), value: "LoadAppInit_DLLs".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($reg*)".into(), enabled: true },
+            // -- Credential Access --
+            YaraRule { id: "cred_lsass_dump".into(), name: "LSASS Memory Dump".into(), description: "Detects LSASS credential dumping tools".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["credentials".into(), "mitre:T1003.001".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "lsass.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "MiniDumpWriteDump".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "procdump".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "comsvcs.dll".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "cred_dcsync".into(), name: "DCSync Attack".into(), description: "Detects DCSync attack patterns for AD credential theft".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["credentials".into(), "mitre:T1003.006".into(), "active_directory".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "DRSUAPI".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "DsGetNCChanges".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "Directory Replication".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "cred_token_theft".into(), name: "Token Theft".into(), description: "Detects Windows token impersonation/theft".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["credentials".into(), "mitre:T1134".into()], strings: vec![YaraString { identifier: "$api1".into(), value: "ImpersonateLoggedOnUser".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api2".into(), value: "DuplicateTokenEx".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api3".into(), value: "SetThreadToken".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($api*)".into(), enabled: true },
+            // -- Defense Evasion --
+            YaraRule { id: "evasion_amsi_bypass".into(), name: "AMSI Bypass".into(), description: "Detects AMSI bypass techniques".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["evasion".into(), "mitre:T1562.001".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "AmsiScanBuffer".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "amsi.dll".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "amsiInitFailed".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "SetProcessMitigationPolicy".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "evasion_etw_patch".into(), name: "ETW Patching".into(), description: "Detects Event Tracing for Windows patching to evade logging".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["evasion".into(), "mitre:T1562.006".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "EtwEventWrite".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "NtTraceControl".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "evasion_unhooking".into(), name: "API Unhooking".into(), description: "Detects ntdll unhooking to restore syscall stubs".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["evasion".into(), "mitre:T1562.001".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "NtProtectVirtualMemory".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "NtReadVirtualMemory".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            YaraRule { id: "evasion_timestomp".into(), name: "Timestomping".into(), description: "Detects file timestamp manipulation".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["evasion".into(), "mitre:T1070.006".into()], strings: vec![YaraString { identifier: "$api1".into(), value: "SetFileTime".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$api2".into(), value: "SetFileAttributes".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($api*)".into(), enabled: true },
+            YaraRule { id: "evasion_signed_proxy".into(), name: "Signed Binary Proxy Execution".into(), description: "Detects use of signed binaries for proxy execution (mshta, regsvr32, rundll32)".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["evasion".into(), "mitre:T1218".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "mshta.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "regsvr32.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "rundll32.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            // -- Persistence --
+            YaraRule { id: "persist_scheduled_task".into(), name: "Scheduled Task Creation".into(), description: "Detects suspicious scheduled task creation".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["persistence".into(), "mitre:T1053.005".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "schtasks /create".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "ScheduledTask".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "Register-ScheduledTask".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "persist_service_create".into(), name: "Service Creation".into(), description: "Detects suspicious service installation".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["persistence".into(), "mitre:T1543.003".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "sc create".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "New-Service".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "Win32_Service".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "persist_run_key".into(), name: "Registry Run Key".into(), description: "Detects persistence via registry Run/RunOnce keys".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["persistence".into(), "mitre:T1547.001".into()], strings: vec![YaraString { identifier: "$reg1".into(), value: "\\CurrentVersion\\Run\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$reg2".into(), value: "\\CurrentVersion\\RunOnce\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($reg*)".into(), enabled: true },
+            YaraRule { id: "persist_wmi_sub".into(), name: "WMI Event Subscription".into(), description: "Detects WMI persistence via event subscription".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["persistence".into(), "mitre:T1546.003".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "__EventFilter".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "CommandLineEventConsumer".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "__FilterToConsumerBinding".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            // -- Discovery --
+            YaraRule { id: "disc_whoami".into(), name: "Whoami Enumeration".into(), description: "Detects system enumeration commands".into(), severity: EventSeverity::Low, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["discovery".into(), "mitre:T1033".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "whoami /all".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "whoami /priv".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s3".into(), value: "net group \"Domain Admins\"".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "disc_nltest".into(), name: "Domain Discovery".into(), description: "Detects domain reconnaissance commands".into(), severity: EventSeverity::Low, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["discovery".into(), "mitre:T1482".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "nltest /domain_trusts".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "net group \"Enterprise Admins\"".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s3".into(), value: "dsquery".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "disc_systeminfo".into(), name: "System Information Discovery".into(), description: "Detects systeminfo and similar discovery commands".into(), severity: EventSeverity::Low, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["discovery".into(), "mitre:T1082".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "systeminfo".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "ipconfig /all".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }], condition: "1 of ($s*)".into(), enabled: true },
+            // -- Script Abuse --
+            YaraRule { id: "script_ps_obfuscated".into(), name: "PowerShell Obfuscation".into(), description: "Detects obfuscated PowerShell commands".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["script".into(), "mitre:T1059.001".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "powershell -enc".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "powershell -nop".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s3".into(), value: "DownloadString".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "IEX(".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s5".into(), value: "Invoke-Expression".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "script_office_macro".into(), name: "Office Macro Execution".into(), description: "Detects malicious Office macro patterns".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["script".into(), "mitre:T1059.005".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "Auto_Open".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "Document_Open".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "Shell(".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s4".into(), value: "WScript.Shell".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s5".into(), value: "CreateObject".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "script_hta_abuse".into(), name: "HTA/WSF Abuse".into(), description: "Detects HTML Application or Windows Script File abuse".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["script".into(), "mitre:T1218.005".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "mshta.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "wscript.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "cscript.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "script_certutil".into(), name: "Certutil Download".into(), description: "Detects certutil being used to download files".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["script".into(), "mitre:T1105".into(), "mitre:T1218.030".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "certutil -urlcache".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "certutil -decode".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s3".into(), value: "certutil.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            // -- Network / C2 --
+            YaraRule { id: "net_dns_tunnel".into(), name: "DNS Tunneling".into(), description: "Detects DNS tunneling for data exfiltration".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["network".into(), "mitre:T1071.004".into(), "exfiltration".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "nslookup -type=TXT".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "dnscat".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "iodine".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "net_beacon".into(), name: "C2 Beacon Pattern".into(), description: "Detects command-and-control beacon indicators".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["network".into(), "c2".into(), "mitre:T1573".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "sleep(".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "jitter".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "checkin".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            YaraRule { id: "net_encoded_cmd".into(), name: "Encoded Command Execution".into(), description: "Detects base64-encoded command execution".into(), severity: EventSeverity::High, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["network".into(), "mitre:T1059.001".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "FromBase64String".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "-EncodedCommand".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "[Convert]::FromBase64".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            // -- Lateral Movement --
+            YaraRule { id: "lateral_psexec".into(), name: "PsExec Lateral Movement".into(), description: "Detects PsExec usage for lateral movement".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["lateral_movement".into(), "mitre:T1021.002".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "psexec".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "\\PSEXESVC".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "PsExec.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "lateral_wmi_exec".into(), name: "WMI Execution".into(), description: "Detects WMI-based remote execution".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["lateral_movement".into(), "mitre:T1047".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "Win32_Process".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "Create()".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s3".into(), value: "Invoke-WmiMethod".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "2 of ($s*)".into(), enabled: true },
+            // -- Exfiltration --
+            YaraRule { id: "exfil_large_upload".into(), name: "Large Data Upload".into(), description: "Detects potential data exfiltration via large uploads".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["exfiltration".into(), "mitre:T1041".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "curl -X POST".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "Invoke-WebRequest -Method Post".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
+            YaraRule { id: "exfil_http_post".into(), name: "HTTP POST Exfiltration".into(), description: "Detects HTTP POST-based data exfiltration".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["exfiltration".into(), "mitre:T1048".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "Content-Type: multipart/form-data".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$s2".into(), value: "curl.exe".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "all of ($s*)".into(), enabled: true },
+            // -- Suspicious Indicators --
+            YaraRule { id: "sus_high_entropy".into(), name: "High Entropy Payload".into(), description: "Detects high-entropy strings indicating encrypted/compressed data".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["suspicious".into(), "obfuscation".into()], strings: vec![YaraString { identifier: "$b64".into(), value: "TVqQAAMAAAAEAAAA".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$b642".into(), value: "UEsDBBQAAAAI".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$b643".into(), value: "H4sIAAAAA".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($b64*)".into(), enabled: true },
+            YaraRule { id: "sus_temp_folder".into(), name: "Suspicious Temp Execution".into(), description: "Detects executable running from temp directories".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["suspicious".into(), "mitre:T1059".into()], strings: vec![YaraString { identifier: "$p1".into(), value: "\\Temp\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$p2".into(), value: "\\AppData\\Local\\Temp\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }, YaraString { identifier: "$p3".into(), value: "\\Windows\\Temp\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($p*)".into(), enabled: true },
+            YaraRule { id: "sus_ransom_note".into(), name: "Ransomware Note".into(), description: "Detects ransomware ransom note patterns".into(), severity: EventSeverity::Critical, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["ransomware".into(), "mitre:T1486".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "your files have been encrypted".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s2".into(), value: "pay the ransom".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s3".into(), value: "bitcoin wallet".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }, YaraString { identifier: "$s4".into(), value: "decrypt your files".into(), string_type: YaraStringType::Text, modifiers: vec!["nocase".into()] }], condition: "2 of ($s*)".into(), enabled: true },
+            YaraRule { id: "sus_hidden_folder".into(), name: "Hidden Folder Execution".into(), description: "Detects execution from hidden folders".into(), severity: EventSeverity::Medium, author: "RoyalSecurity".into(), date: "2025-01-01".into(), tags: vec!["suspicious".into(), "evasion".into()], strings: vec![YaraString { identifier: "$s1".into(), value: "\\\\.\\".into(), string_type: YaraStringType::Text, modifiers: vec![] }], condition: "1 of ($s*)".into(), enabled: true },
         ];
 
-        for rule in defaults {
+        for rule in rules {
             self.add_rule(rule);
         }
+        info!(count = self.rules.len(), "Loaded built-in YARA rules");
     }
+
+
+
 
     pub fn import_rules_from_yaml(
         &mut self,
@@ -879,9 +777,9 @@ mod tests {
     fn test_load_default_rules() {
         let mut engine = YaraEngine::new();
         engine.load_default_rules();
-        assert_eq!(engine.rules.len(), 10);
-        assert_eq!(engine.compiled_rules.len(), 10);
-        assert_eq!(engine.stats.total_rules, 10);
+        assert!(engine.rules.len() >= 40, "Expected at least 40 built-in rules, got {}", engine.rules.len());
+        assert_eq!(engine.compiled_rules.len(), engine.rules.len());
+        assert_eq!(engine.stats.total_rules, engine.rules.len());
     }
 
     #[test]
@@ -917,7 +815,7 @@ mod tests {
         let mut engine = YaraEngine::new();
         engine.load_default_rules();
         let rules = engine.list_rules();
-        assert_eq!(rules.len(), 10);
+        assert!(rules.len() >= 40, "Expected at least 40 built-in rules, got {}", rules.len());
     }
 
     #[test]

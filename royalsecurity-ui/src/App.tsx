@@ -13,10 +13,12 @@ import Rules from './pages/Rules';
 import Compliance from './pages/Compliance';
 import AuditLog from './pages/AuditLog';
 import SettingsPage from './pages/Settings';
+import SetupWizard from './components/SetupWizard';
 import NotificationToast from './components/NotificationToast';
 import { useNotifications } from './hooks/useNotifications';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useEventStream } from './hooks/useEventStream';
+import { getConfig, updateConfig } from './lib/tauri-bridge';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: BarChart3 },
@@ -78,10 +80,25 @@ function TitleBar() {
 
 function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
+  const [showWizard, setShowWizard] = useState(true);
   const { notifications, addNotification, dismissNotification } = useNotifications();
   const { setRefreshCallback, setEscapeCallback } = useKeyboardShortcuts();
   const { events } = useEventStream();
   const prevEventCountRef = useRef(0);
+
+  useEffect(() => {
+    const checkFirstRun = async () => {
+      try {
+        const config = await getConfig();
+        if (config && (config as any).first_run === false) {
+          setShowWizard(false);
+        }
+      } catch {
+        // Show wizard on error (first run assumption)
+      }
+    };
+    checkFirstRun();
+  }, []);
 
   useEffect(() => {
     setRefreshCallback(() => {
@@ -112,6 +129,19 @@ function AppShell() {
       }
     }
   }, [events, addNotification]);
+
+  const handleWizardComplete = async () => {
+    setShowWizard(false);
+    try {
+      await updateConfig({ first_run: false } as any);
+    } catch {
+      // Best effort
+    }
+  };
+
+  if (showWizard) {
+    return <SetupWizard onComplete={handleWizardComplete} />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>

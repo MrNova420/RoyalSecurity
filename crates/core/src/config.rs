@@ -23,6 +23,12 @@ pub struct GeneralConfig {
     pub license_key: String,
     pub telemetry_enabled: bool,
     pub auto_update: bool,
+    #[serde(default = "default_first_run")]
+    pub first_run: bool,
+}
+
+fn default_first_run() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +123,7 @@ impl Default for AppConfig {
                 license_key: "".into(),
                 telemetry_enabled: true,
                 auto_update: true,
+                first_run: true,
             },
             agent: AgentConfig {
                 run_as_service: true,
@@ -204,6 +211,7 @@ impl AppConfig {
         match key {
             "general.app_name" => Some(ConfigValue::String(self.general.app_name.clone())),
             "general.telemetry_enabled" => Some(ConfigValue::Bool(self.general.telemetry_enabled)),
+            "general.first_run" => Some(ConfigValue::Bool(self.general.first_run)),
             "agent.heartbeat_interval_secs" => Some(ConfigValue::Integer(self.agent.heartbeat_interval_secs as i64)),
             "agent.max_memory_mb" => Some(ConfigValue::Integer(self.agent.max_memory_mb as i64)),
             _ => None,

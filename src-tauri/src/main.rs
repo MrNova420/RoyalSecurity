@@ -13,6 +13,7 @@ use royalsecurity_core::crypto::CryptoVault;
 use royalsecurity_core::ppl::{ProcessProtection, ProtectionConfig, ProtectionStatus};
 use royalsecurity_core::registry::ModuleRegistry;
 use royalsecurity_core::tpm::TpmManager;
+use royalsecurity_core::engine::{SecurityEngine, ScanType};
 
 use royalsecurity_common::types::{SecurityEventEnvelope, SecurityEvent, ProcessInfo};
 
@@ -96,6 +97,7 @@ impl Default for ThreatIntelAggregator {
 // ---------------------------------------------------------------------------
 
 struct AppState {
+    engine: Arc<SecurityEngine>,
     bus: EventBus,
     config: Arc<RwLock<AppConfig>>,
     vault: Arc<RwLock<CryptoVault>>,
@@ -470,6 +472,7 @@ async fn evaluate_event(
 ) -> Result<serde_json::Value, String> {
     let envelope: SecurityEventEnvelope =
         serde_json::from_value(event).map_err(|e| e.to_string())?;
+    let _ = state.engine.bus.publish(envelope.payload.clone());
     let sigma_matches = {
         let engine = state.rule_engine.read().await;
         engine.evaluate_event(&envelope)
@@ -492,6 +495,7 @@ async fn evaluate_event(
 async fn trigger_threat_intel_update(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, String> {
+    let engine_msg = state.engine.trigger_threat_intel_update().await?;
     let feed_count = {
         let manager = state.feed_manager.read().await;
         manager.feeds().len()
@@ -502,6 +506,7 @@ async fn trigger_threat_intel_update(
     aggregator.last_sync = Some(chrono::Utc::now().to_rfc3339());
     aggregator.feeds_configured = feed_count;
     Ok(serde_json::json!({
+        "engine_message": engine_msg,
         "feeds_configured": feed_count,
         "results": results.into_iter().map(|r| serde_json::to_value(r).unwrap_or_default()).collect::<Vec<_>>(),
     }))
@@ -613,7 +618,12 @@ async fn remove_detection_rule(
 }
 
 #[tauri::command]
-async fn trigger_scan(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+async fn trigger_scan(
+    state: State<'_, AppState>,
+    scan_type: Option<ScanType>,
+) -> Result<serde_json::Value, String> {
+    let scan_type_val = scan_type.unwrap_or_default();
+    let _ = state.engine.trigger_scan(scan_type_val.as_str()).await;
     {
         let mut scan = state.scan_state.write().await;
         if scan.running {
@@ -837,6 +847,54 @@ async fn verify_audit_chain(state: State<'_, AppState>) -> Result<serde_json::Va
     }))
 }
 
+#[tauri::command]
+async fn get_engine_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let stats = state.engine.stats();
+    Ok(serde_json::to_value(stats).map_err(|e| e.to_string())?)
+}
+
+#[tauri::command]
+async fn get_detection_rules(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let sigma_count = {
+        let engine = state.rule_engine.read().await;
+        engine.sigma_rule_count()
+    };
+    let dsl_count = {
+        let engine = state.rule_engine.read().await;
+        engine.dsl_rule_count()
+    };
+    let yara_count = {
+        let yara = state.yara_engine.read().await;
+        yara.list_rules().len()
+    };
+    Ok(serde_json::json!({
+        "sigma_rules": sigma_count,
+        "dsl_rules": dsl_count,
+        "yara_rules": yara_count,
+        "total": sigma_count + dsl_count + yara_count,
+    }))
+}
+
+#[tauri::command]
+async fn force_intel_update(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    state.engine.force_intel_update();
+    let feed_count = {
+        let manager = state.feed_manager.read().await;
+        manager.feeds().len()
+    };
+    let mut updater = state.rule_updater.write().await;
+    let results = updater.full_update().await;
+    let mut aggregator = state.intel_aggregator.write().await;
+    aggregator.last_sync = Some(chrono::Utc::now().to_rfc3339());
+    aggregator.feeds_configured = feed_count;
+    Ok(serde_json::json!({
+        "forced": true,
+        "feeds_configured": feed_count,
+        "results": results.into_iter().map(|r| serde_json::to_value(r).unwrap_or_default()).collect::<Vec<_>>(),
+    }))
+}
 // ---------------------------------------------------------------------------
 // main()
 // ---------------------------------------------------------------------------
@@ -881,17 +939,15 @@ fn main() {
     let _ = ppl.start_watchdog(std::time::Duration::from_secs(30));
     tracing::info!("PPL watchdog started");
 
-    let bus_clone = bus.clone();
-    let ppl_watchdog = ProcessProtection::new(ProtectionConfig::default());
-    let _ = ppl_watchdog.start_watchdog(std::time::Duration::from_secs(5));
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            let _ = bus_clone
-                .publish(SecurityEvent::Process(ProcessInfo::default()));
-        }
-    });
+    let engine = Arc::new(SecurityEngine::new(config.clone()));
+    {
+        let engine_clone = engine.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = engine_clone.start().await {
+                tracing::error!("SecurityEngine start failed: {}", e);
+            }
+        });
+    }
 
     tracing::info!(
         app_name = %config.general.app_name,
@@ -905,6 +961,7 @@ fn main() {
         .plugin(tauri_plugin_log::Builder::default().build())
         .plugin(tauri_plugin_fs::init())
         .manage(AppState {
+            engine,
             bus,
             config: Arc::new(RwLock::new(config)),
             vault: Arc::new(RwLock::new(vault)),
@@ -926,6 +983,9 @@ fn main() {
             network_cache: Arc::new(RwLock::new(Vec::new())),
             alert_store: Arc::new(RwLock::new(Vec::new())),
             scan_state: Arc::new(RwLock::new(ScanState::default())),
+        })
+        .setup(|_app| {
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             // READ commands (16)
@@ -962,7 +1022,14 @@ fn main() {
             get_process_detail,
             export_audit_log,
             verify_audit_chain,
+            // Engine commands
+            get_engine_stats,
+            get_detection_rules,
+            force_intel_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+
+
