@@ -11,4 +11,7 @@ royalsecurity-common = { path = '../common' }
 tokio.workspace = true
 tracing.workspace = true
 serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+serde.workspace = true
 

@@ -395,4 +395,5 @@ pub struct AuditEntry {
     pub details: HashMap<String, serde_json::Value>,
     pub previous_hash: String,
     pub current_hash: String,
+    pub sequence: u64,
 }
