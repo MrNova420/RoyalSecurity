@@ -1,9 +1,10 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   Settings, Save, Shield, Server, Activity, Network,
-  Database, FileSearch, Cpu, CheckCircle
+  Database, FileSearch, Cpu, CheckCircle, AlertTriangle, RefreshCw
 } from 'lucide-react';
-import { getConfig } from '../lib/tauri-bridge';
+import { getConfig, updateConfig, triggerScan } from '../lib/tauri-bridge';
+import type { Config } from '../lib/tauri-bridge';
 
 interface ModuleConfig {
   id: string;
@@ -12,17 +13,6 @@ interface ModuleConfig {
   enabled: boolean;
   icon: any;
   status: 'running' | 'stopped' | 'error';
-}
-
-interface AgentConfig {
-  hostname: string;
-  server_url: string;
-  log_level: string;
-  scan_interval: number;
-  alert_threshold: string;
-  auto_isolate: boolean;
-  telemetry_enabled: boolean;
-  max_cpu_percent: number;
 }
 
 const defaultModules: ModuleConfig[] = [
@@ -46,9 +36,9 @@ const statusColors: Record<string, string> = {
 
 export default function SettingsPage() {
   const [modules, setModules] = useState<ModuleConfig[]>(defaultModules);
-  const [config, setConfig] = useState<AgentConfig>({
-    hostname: 'WIN-SRV-001',
-    server_url: 'https://royalsecurity.local:8443',
+  const [config, setConfig] = useState<Config>({
+    hostname: '',
+    server_url: '',
     log_level: 'info',
     scan_interval: 300,
     alert_threshold: 'medium',
@@ -57,23 +47,31 @@ export default function SettingsPage() {
     max_cpu_percent: 25,
   });
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const data = await getConfig() as Partial<AgentConfig>;
-        if (data) {
-          setConfig((prev) => ({ ...prev, ...data }));
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setFeedback({ type, message });
+    setTimeout(() => setFeedback(null), 5000);
+  };
+
+  const load = useCallback(async () => {
+    try {
+      const data = await getConfig();
+      if (data) {
+        setConfig((prev) => ({ ...prev, ...data }));
+        if ((data as any).modules && Array.isArray((data as any).modules)) {
+          setModules((data as any).modules);
         }
-      } catch {
-        // Use defaults
-      } finally {
-        setLoading(false);
       }
+    } catch {
+      // Use defaults
+    } finally {
+      setLoading(false);
     }
-    load();
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const toggleModule = (id: string) => {
     setModules((prev) =>
@@ -85,9 +83,25 @@ export default function SettingsPage() {
     );
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await updateConfig(config);
+      showFeedback('success', 'Configuration saved successfully');
+    } catch (err: any) {
+      showFeedback('error', err?.toString() || 'Failed to save configuration');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleScan = async (scanType: string) => {
+    try {
+      const result = await triggerScan(scanType);
+      showFeedback('success', result.message || `Started ${scanType} scan`);
+    } catch (err: any) {
+      showFeedback('error', err?.toString() || 'Failed to trigger scan');
+    }
   };
 
   if (loading) {
@@ -106,18 +120,22 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Settings</h1>
         <div className="flex items-center gap-2">
-          {saved && (
-            <span className="flex items-center gap-1.5 text-xs text-green-400">
-              <CheckCircle className="w-4 h-4" />
-              Saved
+          {feedback && (
+            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+              {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {feedback.message}
             </span>
           )}
+          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
           <button
             onClick={handleSave}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-600 transition-colors"
+            disabled={saving}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-600 transition-colors disabled:opacity-50"
           >
             <Save className="w-3.5 h-3.5" />
-            Save Changes
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -131,7 +149,7 @@ export default function SettingsPage() {
                 <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Hostname</label>
                 <input
                   type="text"
-                  value={config.hostname}
+                  value={config.hostname || ''}
                   onChange={(e) => setConfig({ ...config, hostname: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
                   style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
@@ -141,7 +159,7 @@ export default function SettingsPage() {
                 <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Server URL</label>
                 <input
                   type="text"
-                  value={config.server_url}
+                  value={config.server_url || ''}
                   onChange={(e) => setConfig({ ...config, server_url: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
                   style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
@@ -151,7 +169,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Log Level</label>
                   <select
-                    value={config.log_level}
+                    value={config.log_level || 'info'}
                     onChange={(e) => setConfig({ ...config, log_level: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
                     style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
@@ -165,7 +183,7 @@ export default function SettingsPage() {
                 <div>
                   <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Alert Threshold</label>
                   <select
-                    value={config.alert_threshold}
+                    value={config.alert_threshold || 'medium'}
                     onChange={(e) => setConfig({ ...config, alert_threshold: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
                     style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
@@ -180,14 +198,14 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                  Scan Interval (seconds): {config.scan_interval}
+                  Scan Interval (seconds): {config.scan_interval || 300}
                 </label>
                 <input
                   type="range"
                   min="30"
                   max="3600"
                   step="30"
-                  value={config.scan_interval}
+                  value={config.scan_interval || 300}
                   onChange={(e) => setConfig({ ...config, scan_interval: parseInt(e.target.value) })}
                   className="w-full accent-indigo-500"
                 />
@@ -198,14 +216,14 @@ export default function SettingsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                  Max CPU Usage: {config.max_cpu_percent}%
+                  Max CPU Usage: {config.max_cpu_percent || 25}%
                 </label>
                 <input
                   type="range"
                   min="5"
                   max="100"
                   step="5"
-                  value={config.max_cpu_percent}
+                  value={config.max_cpu_percent || 25}
                   onChange={(e) => setConfig({ ...config, max_cpu_percent: parseInt(e.target.value) })}
                   className="w-full accent-indigo-500"
                 />
@@ -235,6 +253,27 @@ export default function SettingsPage() {
                     />
                   </button>
                 </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+            <h2 className="text-sm font-semibold mb-4">Quick Actions</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'Quick Scan', type: 'quick' },
+                { label: 'Full System Scan', type: 'full' },
+                { label: 'Memory Scan', type: 'memory' },
+                { label: 'Network Scan', type: 'network' },
+              ].map((scan) => (
+                <button
+                  key={scan.type}
+                  onClick={() => handleScan(scan.type)}
+                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border hover:bg-white/5 transition-colors"
+                  style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                >
+                  {scan.label}
+                </button>
               ))}
             </div>
           </div>

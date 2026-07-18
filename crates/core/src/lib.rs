@@ -3,7 +3,9 @@ pub mod config;
 pub mod crypto;
 pub mod audit;
 pub mod module;
+pub mod ppl;
 pub mod registry;
+pub mod tpm;
 
 pub use royalsecurity_common as common;
 pub use bus::*;
@@ -12,6 +14,7 @@ pub use crypto::*;
 pub use audit::*;
 pub use module::*;
 pub use registry::*;
+pub use tpm::*;
 
 #[cfg(test)]
 mod tests {

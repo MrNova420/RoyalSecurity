@@ -1,33 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
-  AlertTriangle, Search, RefreshCw
+  AlertTriangle, Search, RefreshCw, ShieldAlert, Eye, CheckCircle
 } from 'lucide-react';
-import { getAlertStats } from '../lib/tauri-bridge';
-
-interface Threat {
-  id: string;
-  severity: 'critical' | 'high' | 'medium' | 'low' | 'informational';
-  title: string;
-  source: string;
-  mitre: string;
-  host: string;
-  time: string;
-  status: 'active' | 'investigating' | 'resolved' | 'false_positive';
-  description: string;
-}
-
-const mockThreats: Threat[] = [
-  { id: 'THR-001', severity: 'critical', title: 'Ransomware Execution Attempt', source: 'EDR', mitre: 'T1486 - Data Encrypted for Impact', host: 'WIN-SRV-001', time: '2 min ago', status: 'active', description: 'PowerShell process spawned cmd.exe which attempted to encrypt files with .locked extension. Process chain terminated.' },
-  { id: 'THR-002', severity: 'critical', title: 'Credential Dumping via LSASS', source: 'EDR', mitre: 'T1003.001 - LSASS Memory', host: 'WIN-DC-003', time: '8 min ago', status: 'investigating', description: 'Suspicious access to LSASS process memory detected. Potential Mimikatz usage identified through memory scan.' },
-  { id: 'THR-003', severity: 'high', title: 'Lateral Movement via PsExec', source: 'Sigma', mitre: 'T1021.002 - SMB/Windows Admin Shares', host: 'WIN-SRV-002', time: '15 min ago', status: 'active', description: 'PsExec service created on remote host from WIN-WS-047. Service binary executed in temp directory.' },
-  { id: 'THR-004', severity: 'high', title: 'PowerShell Reverse Shell', source: 'YARA', mitre: 'T1059.001 - PowerShell', host: 'WIN-WS-012', time: '23 min ago', status: 'investigating', description: 'Outbound TCP connection from PowerShell process to external IP 185.220.101.34 on port 443.' },
-  { id: 'THR-005', severity: 'medium', title: 'Suspicious Scheduled Task', source: 'HIDS', mitre: 'T1053.005 - Scheduled Task', host: 'WIN-SRV-001', time: '31 min ago', status: 'active', description: 'New scheduled task "WindowsUpdateService" created pointing to %TEMP%\\update.exe. Task not signed.' },
-  { id: 'THR-006', severity: 'medium', title: 'DNS Tunneling Detected', source: 'Network', mitre: 'T1071.004 - DNS', host: 'WIN-WS-089', time: '42 min ago', status: 'active', description: 'Anomalous DNS query patterns detected. High-entropy subdomain queries to suspicious domain.' },
-  { id: 'THR-007', severity: 'low', title: 'New Service Installation', source: 'Sysmon', mitre: 'T1543.003 - Windows Service', host: 'WIN-SRV-002', time: '1 hr ago', status: 'false_positive', description: 'Legitimate Windows service "CryptSvc Update" installed by Windows Update process.' },
-  { id: 'THR-008', severity: 'high', title: 'Pass-the-Hash Attempt', source: 'Sigma', mitre: 'T1550.002 - Pass the Hash', host: 'WIN-DC-003', time: '1 hr ago', status: 'investigating', description: 'NTLM authentication using hash passed from compromised workstation WIN-WS-023 to domain controller.' },
-  { id: 'THR-009', severity: 'medium', title: 'Registry Persistence Mechanism', source: 'EDR', mitre: 'T1547.001 - Registry Run Keys', host: 'WIN-WS-012', time: '2 hr ago', status: 'active', description: 'New entry added to HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run pointing to executable in AppData.' },
-  { id: 'THR-010', severity: 'low', title: 'USB Device Connected', source: 'DLP', mitre: 'T1091 - Removable Media', host: 'WIN-WS-047', time: '3 hr ago', status: 'resolved', description: 'USB mass storage device connected. File scan completed - no sensitive data exfiltration detected.' },
-];
+import { getThreats, getAlertStats, blockIp, triggerThreatIntelUpdate } from '../lib/tauri-bridge';
+import type { Threat, AlertStats } from '../lib/tauri-bridge';
 
 const severityColors: Record<string, string> = {
   critical: 'var(--critical)',
@@ -45,26 +21,63 @@ const statusColors: Record<string, string> = {
 };
 
 export default function Threats() {
-  const [threats] = useState<Threat[]>(mockThreats);
+  const [threats, setThreats] = useState<Threat[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedThreat, setSelectedThreat] = useState<Threat | null>(null);
-  const [stats, setStats] = useState({ critical: 3, high: 12, medium: 28, low: 47 });
-  const [, setLoading] = useState(true);
+  const [stats, setStats] = useState<AlertStats>({ total_alerts: 0, critical: 0, high: 0, medium: 0, low: 0, informational: 0 });
+  const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setFeedback({ type, message });
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
+  const load = useCallback(async () => {
+    try {
+      const [threatsData, statsData] = await Promise.allSettled([getThreats(), getAlertStats()]);
+      if (threatsData.status === 'fulfilled' && Array.isArray(threatsData.value)) {
+        setThreats(threatsData.value);
+      }
+      if (statsData.status === 'fulfilled') {
+        setStats(statsData.value);
+      }
+    } catch {
+      // Use defaults
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const data = await getAlertStats();
-        setStats({ critical: data.critical, high: data.high, medium: data.medium, low: data.low });
-      } catch {
-        // Use defaults
-      } finally {
-        setLoading(false);
-      }
-    }
     load();
-  }, []);
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const handleBlockIp = async (ip: string) => {
+    try {
+      const result = await blockIp(ip);
+      showFeedback('success', result.message || `Blocked IP: ${ip}`);
+    } catch (err: any) {
+      showFeedback('error', err?.toString() || 'Failed to block IP');
+    }
+  };
+
+  const handleInvestigate = async (threatId: string) => {
+    try {
+      await triggerThreatIntelUpdate();
+      showFeedback('success', `Investigation triggered for ${threatId}. Threat intel updated.`);
+    } catch (err: any) {
+      showFeedback('error', err?.toString() || 'Failed to trigger investigation');
+    }
+  };
+
+  const handleResolve = (threatId: string) => {
+    setThreats(prev => prev.map(t => t.id === threatId ? { ...t, status: 'resolved' } : t));
+    showFeedback('success', `Threat ${threatId} marked as resolved.`);
+  };
 
   const filtered = threats.filter((t) => {
     if (filter !== 'all' && t.severity !== filter) return false;
@@ -72,14 +85,33 @@ export default function Threats() {
     return true;
   });
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3">
+          <AlertTriangle className="w-5 h-5 text-indigo-400 animate-pulse" />
+          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading threats...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold">Threats</h1>
-        <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {feedback && (
+            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+              {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {feedback.message}
+            </span>
+          )}
+          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -133,7 +165,9 @@ export default function Threats() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((threat) => (
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} className="py-8 text-center" style={{ color: 'var(--text-secondary)' }}>No threats found</td></tr>
+            ) : filtered.map((threat) => (
               <tr
                 key={threat.id}
                 className="border-b hover:bg-white/5 transition-colors cursor-pointer"
@@ -182,13 +216,25 @@ export default function Threats() {
           </div>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>{selectedThreat.description}</p>
           <div className="flex gap-2 mt-4">
-            <button className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleBlockIp(selectedThreat.host); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
               Block Indicator
             </button>
-            <button className="px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleInvestigate(selectedThreat.id); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors"
+            >
+              <Eye className="w-3.5 h-3.5" />
               Investigate
             </button>
-            <button className="px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors">
+            <button
+              onClick={(e) => { e.stopPropagation(); handleResolve(selectedThreat.id); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
+            >
+              <CheckCircle className="w-3.5 h-3.5" />
               Mark Resolved
             </button>
           </div>

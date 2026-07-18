@@ -1,12 +1,16 @@
 ﻿pub mod feed;
+pub mod feeds;
 pub mod matcher;
 pub mod stix;
+pub mod updater;
 
 pub use royalsecurity_core as core;
 pub use royalsecurity_common as common;
 pub use feed::*;
+pub use feeds::*;
 pub use matcher::*;
 pub use stix::*;
+pub use updater::{RuleUpdater, UpdateFeed, UpdateResult};
 
 #[cfg(test)]
 mod tests {

@@ -1,4 +1,5 @@
 ﻿pub mod prelude;
+pub mod tpm_seal;
 
 use std::collections::HashMap;
 

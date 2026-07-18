@@ -17,6 +17,12 @@ royalsecurity-common = { path = "../crates/common" }
 royalsecurity-state-store = { path = "../crates/state-store" }
 royalsecurity-rule-engine = { path = "../crates/rule-engine" }
 royalsecurity-threat-intel = { path = "../crates/threat-intel" }
+royalsecurity-crypto-vault = { path = "../crates/crypto-vault" }
+royalsecurity-siem = { path = "../crates/siem" }
+royalsecurity-compliance = { path = "../crates/compliance" }
+royalsecurity-forensic = { path = "../crates/forensic" }
+windows-bridge = { path = "../crates/windows-bridge" }
+royalsecurity-agent-service = { path = "../crates/agent-service" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -24,6 +30,12 @@ tracing = "0.1"
 tracing-subscriber = { workspace = true }
 hostname.workspace = true
 base64.workspace = true
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+] }
 
 [features]
 default = ["custom-protocol"]

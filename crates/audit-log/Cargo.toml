@@ -2,7 +2,7 @@
 name = "royalsecurity-audit-log"
 version.workspace = true
 edition.workspace = true
-description = "Immutable hash-chained audit log, TPM-sealed"
+description = "Production-grade immutable hash-chained audit log with WAL, ring buffer, and batch writes"
 license.workspace = true
 
 [dependencies]
@@ -14,4 +14,4 @@ serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
 uuid.workspace = true
-
+parking_lot.workspace = true

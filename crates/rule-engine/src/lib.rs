@@ -1,12 +1,14 @@
 ﻿pub mod sigma;
 pub mod dsl;
 pub mod engine;
+pub mod yara_engine;
 
 pub use royalsecurity_core as core;
 pub use royalsecurity_common as common;
 pub use sigma::*;
 pub use dsl::*;
 pub use engine::*;
+pub use yara_engine::*;
 
 #[cfg(test)]
 mod tests {

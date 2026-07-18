@@ -1,38 +1,10 @@
-﻿import { useState } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
   Search, RefreshCw, AlertTriangle, Shield,
-  ArrowUpDown, Ban
+  ArrowUpDown, Ban, Cpu, CheckCircle
 } from 'lucide-react';
-
-interface Process {
-  pid: number;
-  name: string;
-  path: string;
-  commandLine: string;
-  cpu: number;
-  memory: number;
-  status: 'running' | 'suspicious' | 'terminated';
-  user: string;
-  parentPid: number;
-  parentName: string;
-  created: string;
-  hash?: string;
-}
-
-const mockProcesses: Process[] = [
-  { pid: 4, name: 'System', path: 'System', commandLine: '', cpu: 0.1, memory: 0.4, status: 'running', user: 'SYSTEM', parentPid: 0, parentName: '-', created: '2026-07-18 08:00:00' },
-  { pid: 584, name: 'svchost.exe', path: 'C:\\Windows\\System32\\svchost.exe', commandLine: 'svchost.exe -k netsvcs', cpu: 1.2, memory: 2.1, status: 'running', user: 'SYSTEM', parentPid: 560, parentName: 'services.exe', created: '2026-07-18 08:01:23' },
-  { pid: 1204, name: 'lsass.exe', path: 'C:\\Windows\\System32\\lsass.exe', commandLine: '', cpu: 0.3, memory: 1.8, status: 'running', user: 'SYSTEM', parentPid: 560, parentName: 'services.exe', created: '2026-07-18 08:01:15' },
-  { pid: 2456, name: 'powershell.exe', path: 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', commandLine: 'powershell.exe -enc SQBmACAAKAAuAC4ALgApAA==', cpu: 8.4, memory: 3.2, status: 'suspicious', user: 'SYSTEM', parentPid: 2380, parentName: 'wmiprvse.exe', created: '2026-07-18 14:23:45', hash: 'a1b2c3d4e5f6...' },
-  { pid: 2480, name: 'cmd.exe', path: 'C:\\Windows\\System32\\cmd.exe', commandLine: 'cmd.exe /c whoami /all', cpu: 0.5, memory: 0.8, status: 'suspicious', user: 'SYSTEM', parentPid: 2456, parentName: 'powershell.exe', created: '2026-07-18 14:23:47' },
-  { pid: 3100, name: 'explorer.exe', path: 'C:\\Windows\\explorer.exe', commandLine: '', cpu: 2.1, memory: 5.4, status: 'running', user: 'ADMIN', parentPid: 2980, parentName: 'userinit.exe', created: '2026-07-18 08:15:00' },
-  { pid: 4200, name: 'chrome.exe', path: 'C:\\Program Files\\Google\\Chrome\\chrome.exe', commandLine: 'chrome.exe --type=renderer', cpu: 4.7, memory: 12.3, status: 'running', user: 'ADMIN', parentPid: 6800, parentName: 'chrome.exe', created: '2026-07-18 09:30:00' },
-  { pid: 5100, name: 'MsMpEng.exe', path: 'C:\\Program Files\\Windows Defender\\MsMpEng.exe', commandLine: '', cpu: 1.5, memory: 4.8, status: 'running', user: 'SYSTEM', parentPid: 560, parentName: 'services.exe', created: '2026-07-18 08:01:30' },
-  { pid: 5680, name: 'sqlservr.exe', path: 'C:\\Program Files\\Microsoft SQL Server\\MSSQL16.MSSQLSERVER\\MSSQL\\Binn\\sqlservr.exe', commandLine: 'sqlservr -s MSSQLSERVER', cpu: 6.3, memory: 8.7, status: 'running', user: 'NT SERVICE\\MSSQLSERVER', parentPid: 560, parentName: 'services.exe', created: '2026-07-18 08:02:00' },
-  { pid: 6200, name: 'net.exe', path: 'C:\\Windows\\System32\\net.exe', commandLine: 'net user /domain', cpu: 0.2, memory: 0.3, status: 'suspicious', user: 'SYSTEM', parentPid: 2480, parentName: 'cmd.exe', created: '2026-07-18 14:23:50' },
-  { pid: 7100, name: 'royalsecurity-agent.exe', path: 'C:\\Program Files\\RoyalSecurity\\royalsecurity-agent.exe', commandLine: '', cpu: 3.2, memory: 2.4, status: 'running', user: 'SYSTEM', parentPid: 560, parentName: 'services.exe', created: '2026-07-18 08:00:10' },
-  { pid: 7400, name: 'taskhostw.exe', path: 'C:\\Windows\\System32\\taskhostw.exe', commandLine: 'taskhostw.exe -Embedding', cpu: 0.1, memory: 0.6, status: 'running', user: 'ADMIN', parentPid: 3100, parentName: 'explorer.exe', created: '2026-07-18 09:00:00' },
-];
+import { getProcessList, terminateProcess } from '../lib/tauri-bridge';
+import type { ProcessInfo } from '../lib/tauri-bridge';
 
 const statusConfig: Record<string, { color: string; bg: string }> = {
   running: { color: 'var(--low)', bg: 'rgba(34,197,94,0.1)' },
@@ -41,11 +13,47 @@ const statusConfig: Record<string, { color: string; bg: string }> = {
 };
 
 export default function Processes() {
-  const [processes] = useState<Process[]>(mockProcesses);
+  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState<'pid' | 'name' | 'cpu' | 'memory'>('pid');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showSuspiciousOnly, setShowSuspiciousOnly] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const showFeedback = (type: 'success' | 'error', message: string) => {
+    setFeedback({ type, message });
+    setTimeout(() => setFeedback(null), 4000);
+  };
+
+  const load = useCallback(async () => {
+    try {
+      const data = await getProcessList();
+      if (Array.isArray(data)) {
+        setProcesses(data);
+      }
+    } catch {
+      // Use empty
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const handleTerminate = async (pid: number, name: string) => {
+    try {
+      const result = await terminateProcess(pid);
+      showFeedback('success', result.message || `Terminated process ${name} (PID ${pid})`);
+      setProcesses(prev => prev.map(p => p.pid === pid ? { ...p, status: 'terminated' } : p));
+    } catch (err: any) {
+      showFeedback('error', err?.toString() || `Failed to terminate ${name}`);
+    }
+  };
 
   const toggleSort = (field: typeof sortBy) => {
     if (sortBy === field) {
@@ -70,6 +78,17 @@ export default function Processes() {
 
   const suspiciousCount = processes.filter((p) => p.status === 'suspicious').length;
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="flex items-center gap-3">
+          <Cpu className="w-5 h-5 text-indigo-400 animate-spin" />
+          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading processes...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -82,10 +101,18 @@ export default function Processes() {
             </span>
           )}
         </div>
-        <button className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {feedback && (
+            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+              {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+              {feedback.message}
+            </span>
+          )}
+          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3">
@@ -140,7 +167,9 @@ export default function Processes() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map((proc) => (
+              {sorted.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center" style={{ color: 'var(--text-secondary)' }}>No processes found</td></tr>
+              ) : sorted.map((proc) => (
                 <tr key={proc.pid} className="border-b hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border-color)' }}>
                   <td className="py-2.5 px-4 font-mono text-[11px]">{proc.pid}</td>
                   <td className="py-2.5 px-4">
@@ -167,16 +196,19 @@ export default function Processes() {
                   <td className="py-2.5 px-4 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{proc.user}</td>
                   <td className="py-2.5 px-4">
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium" style={{
-                      backgroundColor: statusConfig[proc.status].bg,
-                      color: statusConfig[proc.status].color,
+                      backgroundColor: (statusConfig[proc.status] || statusConfig.running).bg,
+                      color: (statusConfig[proc.status] || statusConfig.running).color,
                     }}>
-                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusConfig[proc.status].color }} />
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: (statusConfig[proc.status] || statusConfig.running).color }} />
                       {proc.status}
                     </span>
                   </td>
                   <td className="py-2.5 px-4 text-right">
                     {proc.status === 'suspicious' && (
-                      <button className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors" title="Terminate">
+                      <button
+                        onClick={() => handleTerminate(proc.pid, proc.name)}
+                        className="p-1.5 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors" title="Terminate"
+                      >
                         <Ban className="w-3.5 h-3.5" />
                       </button>
                     )}
