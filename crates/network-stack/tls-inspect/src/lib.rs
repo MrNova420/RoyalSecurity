@@ -1,10 +1,10 @@
 ﻿pub mod prelude;
 
 use chrono::{DateTime, Utc};
-use royalsecurity_common::types::{EventSeverity, NetworkEvent};
+use royalsecurity_common::types::EventSeverity;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TlsInspectError {

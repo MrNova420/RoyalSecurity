@@ -284,7 +284,7 @@ impl ItdrEngine {
             .entry(user.to_string())
             .or_insert_with(UserBaseline::default);
 
-        let mut new_sids: Vec<String> = added_sids
+        let new_sids: Vec<String> = added_sids
             .iter()
             .filter(|sid| !baseline.known_sids.contains(sid))
             .cloned()

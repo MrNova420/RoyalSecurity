@@ -2,7 +2,6 @@
 
 use royalsecurity_common::types::EventSeverity;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{info, warn};
 use uuid::Uuid;
 

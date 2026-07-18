@@ -1,4 +1,4 @@
-﻿pub mod prelude;
+pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -45,7 +45,7 @@ impl Default for DnsCaptureConfig {
 }
 
 pub struct DnsCollector {
-    bus: EventBus,
+    _bus: EventBus,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -58,7 +58,7 @@ pub struct DnsCollector {
 impl DnsCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            bus,
+            _bus: bus,
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,
@@ -71,7 +71,7 @@ impl DnsCollector {
 
     pub fn with_config(bus: EventBus, capture_config: DnsCaptureConfig) -> Self {
         Self {
-            bus,
+            _bus: bus,
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,

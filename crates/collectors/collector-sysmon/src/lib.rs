@@ -2,12 +2,11 @@
 pub use royalsecurity_core as core;
 
 use chrono::{DateTime, Utc};
-use royalsecurity_common::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SysmonEvent {

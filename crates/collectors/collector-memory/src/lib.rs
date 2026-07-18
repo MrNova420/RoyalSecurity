@@ -1,4 +1,4 @@
-﻿pub mod prelude;
+pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -29,7 +29,7 @@ pub struct MemoryAllocEvent {
 }
 
 pub struct MemoryCollector {
-    bus: EventBus,
+    _bus: EventBus,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -42,7 +42,7 @@ pub struct MemoryCollector {
 impl MemoryCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            bus,
+            _bus: bus,
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,

@@ -1,11 +1,8 @@
 ﻿pub mod prelude;
 
 use chrono::{DateTime, Utc};
-use royalsecurity_common::types::{EventSeverity, NetworkEvent, Protocol};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::net::SocketAddr;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TorError {

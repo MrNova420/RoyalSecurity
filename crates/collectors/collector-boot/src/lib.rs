@@ -1,4 +1,4 @@
-﻿pub mod prelude;
+pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -35,7 +35,7 @@ pub struct BootEvent {
 }
 
 pub struct BootCollector {
-    bus: EventBus,
+    _bus: EventBus,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -49,7 +49,7 @@ pub struct BootCollector {
 impl BootCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            bus,
+            _bus: bus,
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,

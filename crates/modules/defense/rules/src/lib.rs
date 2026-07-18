@@ -1,10 +1,9 @@
 ﻿pub mod prelude;
 
-use chrono::{DateTime, Utc};
 use royalsecurity_common::types::EventSeverity;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use royalsecurity_common::types::EventSeverity;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FingerprintTechniqueType {

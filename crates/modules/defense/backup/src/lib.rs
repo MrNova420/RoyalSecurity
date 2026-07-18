@@ -1,4 +1,4 @@
-﻿pub mod prelude;
+pub mod prelude;
 
 use royalsecurity_common::types::*;
 use std::collections::HashMap;
@@ -68,7 +68,7 @@ pub struct BackupMonitor {
     alerts: Vec<BackupAlert>,
     vss_snapshots: HashMap<String, VssSnapshot>,
     deletion_events: Vec<(String, DateTime<Utc>)>,
-    max_backups: usize,
+    _max_backups: usize,
 }
 
 impl BackupMonitor {
@@ -79,7 +79,7 @@ impl BackupMonitor {
             alerts: Vec::new(),
             vss_snapshots: HashMap::new(),
             deletion_events: Vec::new(),
-            max_backups: 1000,
+            _max_backups: 1000,
         }
     }
 

@@ -115,7 +115,7 @@ impl SecureDeleter {
             ("nwipe", "Nwipe", DeletionMethod::DoD522022M),
         ];
 
-        for (tool_name, description, method) in &anti_forensic_tools {
+        for (tool_name, _description, method) in &anti_forensic_tools {
             if name_lower.contains(tool_name) || cmd_lower.contains(tool_name) {
                 warn!(
                     process = %process.name,

@@ -5,7 +5,7 @@ use tracing::warn;
 
 pub struct RansomwareDetector {
     file_modifications: HashMap<String, Vec<FileModEntry>>,
-    entropy_tracker: HashMap<String, f64>,
+    _entropy_tracker: HashMap<String, f64>,
     config: RansomwareConfig,
     alert_count: u64,
     protected_dirs: Vec<String>,
@@ -54,7 +54,7 @@ impl RansomwareDetector {
     pub fn new() -> Self {
         Self {
             file_modifications: HashMap::new(),
-            entropy_tracker: HashMap::new(),
+            _entropy_tracker: HashMap::new(),
             config: RansomwareConfig::default(),
             alert_count: 0,
             protected_dirs: vec![

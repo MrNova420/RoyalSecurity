@@ -17,27 +17,24 @@ use royalsecurity_core::tpm::TpmManager;
 use royalsecurity_common::types::{SecurityEventEnvelope, SecurityEvent, ProcessInfo};
 
 use royalsecurity_crypto_vault::CryptoVault as EnhancedVault;
-use royalsecurity_crypto_vault::tpm_seal::{TpmSealedVault, SealStatus};
+use royalsecurity_crypto_vault::tpm_seal::TpmSealedVault;
 
 use royalsecurity_state_store::store::StateStore;
 
 use royalsecurity_rule_engine::engine::RuleEngine;
 use royalsecurity_rule_engine::sigma::SigmaRule;
-use royalsecurity_rule_engine::yara_engine::{YaraEngine, YaraRule, YaraString, YaraStringType};
+use royalsecurity_rule_engine::yara_engine::{YaraEngine, YaraRule};
 
 use royalsecurity_threat_intel::feed::FeedManager;
 use royalsecurity_threat_intel::matcher::IocMatcher;
 use royalsecurity_threat_intel::updater::RuleUpdater;
 
-use royalsecurity_siem::LocalSiem;
 use royalsecurity_compliance::ComplianceEngine;
-use royalsecurity_forensic::ForensicEngine;
 
 use windows_bridge::process::{list_processes, get_process_by_pid, ProcessInfo as WbProcessInfo};
 use windows_bridge::network::{list_connections, NetworkConnection};
 use windows_bridge::system::get_system_info as get_system_info_raw;
 
-use royalsecurity_agent_service;
 
 // ---------------------------------------------------------------------------
 // Local types not found in workspace crates
@@ -867,7 +864,7 @@ fn main() {
     let mut yara_engine = YaraEngine::new();
     let mut rule_updater = RuleUpdater::new("C:\\ProgramData\\RoyalSecurity\\Rules");
     let ppl = ProcessProtection::new(ProtectionConfig::default());
-    let tpm = TpmManager::new();
+    let _tpm = TpmManager::new();
     let enhanced_vault = EnhancedVault::new();
     let tpm_vault = TpmSealedVault::new(enhanced_vault);
 

@@ -1,4 +1,4 @@
-﻿pub mod prelude;
+pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -42,13 +42,13 @@ pub struct FirmwareEvent {
 
 #[derive(Debug, Clone)]
 struct FirmwareComponent {
-    name: String,
+    _name: String,
     version: String,
     hash: String,
 }
 
 pub struct FirmwareCollector {
-    bus: EventBus,
+    _bus: EventBus,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -61,7 +61,7 @@ pub struct FirmwareCollector {
 impl FirmwareCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            bus,
+            _bus: bus,
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,
@@ -101,7 +101,7 @@ impl FirmwareCollector {
         self.components.insert(
             name.to_string(),
             FirmwareComponent {
-                name: name.to_string(),
+                _name: name.to_string(),
                 version: version.to_string(),
                 hash: hash.to_string(),
             },

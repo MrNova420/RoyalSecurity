@@ -194,7 +194,6 @@ pub struct ThreatIntelAggregator {
 }
 
 fn default_builtin_sources() -> Vec<IntelSource> {
-    let now = Utc::now();
     vec![
         IntelSource {
             name: "VirusTotal".into(),
@@ -539,7 +538,7 @@ impl ThreatIntelAggregator {
                     }
                 }
 
-                if let Some(src) = self.sources.iter().find(|s| s.name == name) {
+                if let Some(_src) = self.sources.iter().find(|s| s.name == name) {
                     // SAFETY: we own source, just update the field via index
                 }
             }
@@ -1984,7 +1983,7 @@ impl ThreatIntelAggregator {
     }
 
     pub async fn get_source_status(&self) -> Vec<IntelSourceStatus> {
-        let stats = self.sync_stats.read().await;
+        let _stats = self.sync_stats.read().await;
         self.sources
             .iter()
             .map(|s| {

@@ -1,10 +1,7 @@
 ﻿pub mod prelude;
 
-use std::net::IpAddr;
 use chrono::{DateTime, Utc};
-use royalsecurity_common::types::EventSeverity;
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum LeakType {

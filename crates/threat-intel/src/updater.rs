@@ -95,8 +95,8 @@ pub struct UpdateResult {
 pub struct RuleUpdater {
     feeds: Vec<UpdateFeed>,
     last_update: Option<DateTime<Utc>>,
-    local_rules_path: String,
-    update_interval_secs: u64,
+    _local_rules_path: String,
+    _update_interval_secs: u64,
     circuit_breaker: CircuitBreaker,
     cached_data: Option<Vec<u8>>,
 }
@@ -125,8 +125,8 @@ impl RuleUpdater {
         Self {
             feeds: Vec::new(),
             last_update: None,
-            local_rules_path: local_path.to_string(),
-            update_interval_secs: 3600,
+            _local_rules_path: local_path.to_string(),
+            _update_interval_secs: 3600,
             circuit_breaker: CircuitBreaker::new(5, 60),
             cached_data: None,
         }
@@ -327,8 +327,8 @@ mod tests {
         let updater = RuleUpdater::new("/tmp/rules");
         assert!(updater.feeds.is_empty());
         assert!(updater.last_update.is_none());
-        assert_eq!(updater.local_rules_path, "/tmp/rules");
-        assert_eq!(updater.update_interval_secs, 3600);
+        assert_eq!(updater._local_rules_path, "/tmp/rules");
+        assert_eq!(updater._update_interval_secs, 3600);
     }
 
     #[test]

@@ -1,9 +1,8 @@
 ﻿pub mod prelude;
 
 use chrono::{DateTime, Utc};
-use royalsecurity_common::types::{DnsEvent, EventSeverity, NetworkEvent};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::net::SocketAddr;
 use tracing::{debug, info, warn};
 

@@ -1,10 +1,9 @@
 ﻿pub mod prelude;
 
-use chrono::{DateTime, Utc};
-use royalsecurity_common::types::EventSeverity;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClientHello {
