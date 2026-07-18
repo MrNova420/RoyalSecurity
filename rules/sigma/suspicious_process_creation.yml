@@ -1,0 +1,188 @@
+﻿title: Suspicious Process Creation Detection
+id: 10000001
+status: experimental
+description: Sigma rules for detecting suspicious process creation patterns
+author: RoyalSecurity
+date: 2025-01-01
+tags:
+  - attack.execution
+  - attack.t1059
+
+---
+
+title: Suspicious PowerShell Encoded Command
+id: 10000002
+status: stable
+description: Detects suspicious PowerShell execution with encoded commands commonly used in attacks
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: powershell.exe
+  CommandLine: -enc
+condition: all
+tags:
+  - attack.execution
+  - attack.t1059.001
+
+---
+
+title: Suspicious PowerShell Download Cradle
+id: 10000003
+status: stable
+description: Detects PowerShell download cradle patterns
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: powershell.exe
+  CommandLine: DownloadString
+condition: all
+tags:
+  - attack.execution
+  - attack.t1059.001
+
+---
+
+title: Credential Access Tool Execution
+id: 10000004
+status: stable
+description: Detects execution of common credential access tools
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  CommandLine: mimikatz
+condition: any
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+
+---
+
+title: LSASS Memory Dump Tool
+id: 10000005
+status: stable
+description: Detects tools dumping LSASS process memory for credential extraction
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  CommandLine: lsass
+  CommandLine: procdump
+condition: any
+tags:
+  - attack.credential_access
+  - attack.t1003.001
+
+---
+
+title: PsExec Lateral Movement
+id: 10000006
+status: stable
+description: Detects PsExec usage for lateral movement across network
+author: RoyalSecurity
+date: "2025-01-01"
+logsource:
+  process_creation: true
+detection:
+  Image: psexec
+  CommandLine: "\\PSEXESVC"
+condition: any
+tags:
+  - attack.lateral_movement
+  - attack.t1021.002
+
+---
+
+title: WMI Lateral Movement
+id: 10000007
+status: stable
+description: Detects WMI-based remote command execution for lateral movement
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: wmic.exe
+  CommandLine: /node:
+condition: all
+tags:
+  - attack.lateral_movement
+  - attack.t1047
+
+---
+
+title: Suspicious Service Creation
+id: 10000008
+status: stable
+description: Detects creation of suspicious Windows services for persistence
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: sc.exe
+  CommandLine: create
+condition: all
+tags:
+  - attack.persistence
+  - attack.t1543.003
+
+---
+
+title: Scheduled Task Creation
+id: 10000009
+status: stable
+description: Detects scheduled task creation for persistence
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: schtasks.exe
+  CommandLine: /create
+condition: all
+tags:
+  - attack.persistence
+  - attack.t1053.005
+
+---
+
+title: Registry Run Key Modification via PowerShell
+id: 10000010
+status: stable
+description: Detects PowerShell modification of registry Run keys for persistence
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: powershell.exe
+  CommandLine: CurrentVersion\\Run
+condition: all
+tags:
+  - attack.persistence
+  - attack.t1547.001
+
+---
+
+title: Defense Evasion via AMSI Bypass
+id: 10000011
+status: stable
+description: Detects PowerShell attempts to bypass AMSI protection
+author: RoyalSecurity
+date: 2025-01-01
+logsource:
+  process_creation: true
+detection:
+  Image: powershell.exe
+  CommandLine: AmsiUtils
+condition: all
+tags:
+  - attack.defense_evasion
+  - attack.t1562.001

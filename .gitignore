@@ -1,5 +1,5 @@
 ﻿# Rust / Cargo
-target/
+/target/
 Cargo.lock
 
 # Node / npm
@@ -12,7 +12,7 @@ dist/
 .idea/
 *.swp
 *.swo
-*~
+*~.swp
 
 # OS
 Thumbs.db
@@ -22,10 +22,23 @@ Desktop.ini
 # Build artifacts
 *.pdb
 *.exe
+*.msi
 *.exe.bak
+
+# Installer output
+installer/output/
 
 # Runtime data (local dev)
 ProgramData/
 
+# Environment files
+.env
+.env.local
+.env.production
+
 # Logs
 *.log
+
+# Editor backup files
+*.bak
+*~
