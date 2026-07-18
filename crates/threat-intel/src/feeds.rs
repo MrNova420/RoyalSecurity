@@ -174,6 +174,15 @@ pub struct IocDatabase {
     pub cidr_blocks: Vec<CidrRule>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceHealth {
+    pub name: String,
+    pub status: SourceStatusType,
+    pub consecutive_failures: u32,
+    pub last_error: Option<String>,
+    pub last_success: Option<DateTime<Utc>>,
+}
+
 pub struct ThreatIntelAggregator {
     pub sources: Vec<IntelSource>,
     pub ioc_database: Arc<RwLock<IocDatabase>>,
@@ -181,6 +190,7 @@ pub struct ThreatIntelAggregator {
     pub reputation_cache: Arc<RwLock<HashMap<String, ReputationScore>>>,
     pub last_full_sync: Arc<RwLock<Option<DateTime<Utc>>>>,
     pub sync_stats: Arc<RwLock<SyncStats>>,
+    source_health: Arc<RwLock<HashMap<String, SourceHealth>>>,
 }
 
 fn default_builtin_sources() -> Vec<IntelSource> {
@@ -356,8 +366,19 @@ fn default_builtin_sources() -> Vec<IntelSource> {
 
 impl ThreatIntelAggregator {
     pub fn new() -> Self {
+        let sources = default_builtin_sources();
+        let mut health = HashMap::new();
+        for s in &sources {
+            health.insert(s.name.clone(), SourceHealth {
+                name: s.name.clone(),
+                status: SourceStatusType::Online,
+                consecutive_failures: 0,
+                last_error: None,
+                last_success: None,
+            });
+        }
         Self {
-            sources: default_builtin_sources(),
+            sources,
             ioc_database: Arc::new(RwLock::new(IocDatabase {
                 ip_iocs: HashMap::new(),
                 domain_iocs: HashMap::new(),
@@ -371,6 +392,7 @@ impl ThreatIntelAggregator {
             reputation_cache: Arc::new(RwLock::new(HashMap::new())),
             last_full_sync: Arc::new(RwLock::new(None)),
             sync_stats: Arc::new(RwLock::new(SyncStats::default())),
+            source_health: Arc::new(RwLock::new(health)),
         }
     }
 
@@ -420,6 +442,26 @@ impl ThreatIntelAggregator {
         results
     }
 
+    pub async fn get_healthy_sources(&self) -> Vec<IntelSource> {
+        let health = self.source_health.read().await;
+        self.sources
+            .iter()
+            .filter(|s| {
+                health
+                    .get(&s.name)
+                    .map(|h| h.status == SourceStatusType::Online || h.status == SourceStatusType::Degraded)
+                    .unwrap_or(true)
+                    && s.enabled
+            })
+            .cloned()
+            .collect()
+    }
+
+    pub async fn get_degraded_report(&self) -> Vec<SourceHealth> {
+        let health = self.source_health.read().await;
+        health.values().cloned().collect()
+    }
+
     pub async fn sync_source(&self, name: &str) -> SyncResult {
         let start = Utc::now();
         let source = self.sources.iter().find(|s| s.name == name);
@@ -446,6 +488,18 @@ impl ThreatIntelAggregator {
 
         match fetched_entries {
             Ok(entries) => {
+                // Mark source healthy on success
+                {
+                    let mut health = self.source_health.write().await;
+                    health.insert(name.to_string(), SourceHealth {
+                        name: name.to_string(),
+                        status: SourceStatusType::Online,
+                        consecutive_failures: 0,
+                        last_error: None,
+                        last_success: Some(Utc::now()),
+                    });
+                }
+
                 let mut db = self.ioc_database.write().await;
                 for entry in entries {
                     let existing = match entry.ioc_type {
@@ -490,6 +544,20 @@ impl ThreatIntelAggregator {
                 }
             }
             Err(e) => {
+                // Mark source degraded on failure
+                {
+                    let mut health = self.source_health.write().await;
+                    let entry = health.entry(name.to_string()).or_insert(SourceHealth {
+                        name: name.to_string(),
+                        status: SourceStatusType::Degraded,
+                        consecutive_failures: 0,
+                        last_error: None,
+                        last_success: None,
+                    });
+                    entry.status = SourceStatusType::Degraded;
+                    entry.consecutive_failures += 1;
+                    entry.last_error = Some(e.clone());
+                }
                 errors.push(e);
             }
         }

@@ -4,6 +4,9 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use tracing::info;
 
+use std::sync::Arc;
+use std::time::Instant;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum YaraStringType {
     Text,
@@ -59,10 +62,51 @@ pub struct YaraStats {
     pub scan_time_avg_us: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ScanStats {
+    pub total_scans: u64,
+    pub rate_limited_scans: u64,
+    pub avg_scan_time_ns: u64,
+}
+
+struct TokenBucket {
+    capacity: u64,
+    tokens: f64,
+    refill_per_sec: f64,
+    last_refill: Instant,
+}
+
+impl TokenBucket {
+    fn new(max_per_sec: u64) -> Self {
+        Self {
+            capacity: max_per_sec,
+            tokens: max_per_sec as f64,
+            refill_per_sec: max_per_sec as f64,
+            last_refill: Instant::now(),
+        }
+    }
+
+    fn try_acquire(&mut self) -> bool {
+        let now = Instant::now();
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+        self.tokens = (self.tokens + elapsed * self.refill_per_sec).min(self.capacity as f64);
+        self.last_refill = now;
+
+        if self.tokens >= 1.0 {
+            self.tokens -= 1.0;
+            true
+        } else {
+            false
+        }
+    }
+}
+
 pub struct YaraEngine {
     rules: Vec<YaraRule>,
     compiled_rules: HashMap<String, CompiledRule>,
     stats: YaraStats,
+    scan_stats: Arc<std::sync::Mutex<ScanStats>>,
+    rate_limiter: Arc<std::sync::Mutex<TokenBucket>>,
 }
 
 fn find_pattern(data: &[u8], pattern: &[u8], nocase: bool) -> Option<usize> {
@@ -101,6 +145,8 @@ impl YaraEngine {
                 matches: 0,
                 scan_time_avg_us: 0,
             },
+            scan_stats: Arc::new(std::sync::Mutex::new(ScanStats::default())),
+            rate_limiter: Arc::new(std::sync::Mutex::new(TokenBucket::new(1000))),
         }
     }
 
@@ -123,6 +169,16 @@ impl YaraEngine {
 
     pub fn scan_data(&mut self, data: &[u8]) -> Vec<YaraMatch> {
         let start = std::time::Instant::now();
+
+        {
+            let mut limiter = self.rate_limiter.lock().unwrap();
+            if !limiter.try_acquire() {
+                let mut stats = self.scan_stats.lock().unwrap();
+                stats.rate_limited_scans += 1;
+                return Vec::new();
+            }
+        }
+
         let mut matches = Vec::new();
 
         for rule in &self.rules {
@@ -185,12 +241,23 @@ impl YaraEngine {
             }
         }
 
-        let elapsed = start.elapsed().as_micros() as u64;
+        let elapsed_ns = start.elapsed().as_nanos() as u64;
+        let elapsed_us = start.elapsed().as_micros() as u64;
         self.stats.matches += matches.len() as u64;
         if self.stats.scan_time_avg_us == 0 {
-            self.stats.scan_time_avg_us = elapsed;
+            self.stats.scan_time_avg_us = elapsed_us;
         } else {
-            self.stats.scan_time_avg_us = (self.stats.scan_time_avg_us + elapsed) / 2;
+            self.stats.scan_time_avg_us = (self.stats.scan_time_avg_us + elapsed_us) / 2;
+        }
+
+        {
+            let mut stats = self.scan_stats.lock().unwrap();
+            stats.total_scans += 1;
+            if stats.avg_scan_time_ns == 0 {
+                stats.avg_scan_time_ns = elapsed_ns;
+            } else {
+                stats.avg_scan_time_ns = (stats.avg_scan_time_ns + elapsed_ns) / 2;
+            }
         }
 
         matches
@@ -219,6 +286,10 @@ impl YaraEngine {
 
     pub fn get_stats(&self) -> &YaraStats {
         &self.stats
+    }
+
+    pub fn get_scan_stats(&self) -> ScanStats {
+        self.scan_stats.lock().unwrap().clone()
     }
 
     pub fn load_default_rules(&mut self) {

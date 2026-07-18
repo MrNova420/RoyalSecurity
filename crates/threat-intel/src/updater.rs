@@ -2,6 +2,69 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256};
 use tracing::{info, warn};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+use std::time::Instant;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CircuitBreakerState {
+    Closed,
+    Open,
+    HalfOpen,
+}
+
+pub struct CircuitBreaker {
+    state: Arc<std::sync::Mutex<CircuitBreakerState>>,
+    consecutive_failures: Arc<AtomicU32>,
+    opened_at: Arc<std::sync::Mutex<Option<Instant>>>,
+    open_duration: std::time::Duration,
+    max_failures: u32,
+}
+
+impl CircuitBreaker {
+    pub fn new(max_failures: u32, open_duration_secs: u64) -> Self {
+        Self {
+            state: Arc::new(std::sync::Mutex::new(CircuitBreakerState::Closed)),
+            consecutive_failures: Arc::new(AtomicU32::new(0)),
+            opened_at: Arc::new(std::sync::Mutex::new(None)),
+            open_duration: std::time::Duration::from_secs(open_duration_secs),
+            max_failures,
+        }
+    }
+
+    pub fn is_available(&self) -> bool {
+        let mut state = self.state.lock().unwrap();
+        match *state {
+            CircuitBreakerState::Closed => true,
+            CircuitBreakerState::Open => {
+                if let Some(opened) = *self.opened_at.lock().unwrap() {
+                    if opened.elapsed() >= self.open_duration {
+                        *state = CircuitBreakerState::HalfOpen;
+                        return true;
+                    }
+                }
+                false
+            }
+            CircuitBreakerState::HalfOpen => true,
+        }
+    }
+
+    pub fn record_success(&self) {
+        self.consecutive_failures.store(0, Ordering::SeqCst);
+        let mut state = self.state.lock().unwrap();
+        *state = CircuitBreakerState::Closed;
+    }
+
+    pub fn record_failure(&self) {
+        let failures = self.consecutive_failures.fetch_add(1, Ordering::SeqCst) + 1;
+        if failures >= self.max_failures {
+            let mut state = self.state.lock().unwrap();
+            *state = CircuitBreakerState::Open;
+            *self.opened_at.lock().unwrap() = Some(Instant::now());
+            warn!(failures = failures, "Circuit breaker tripped, entering Open state");
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FeedType {
@@ -34,6 +97,8 @@ pub struct RuleUpdater {
     last_update: Option<DateTime<Utc>>,
     local_rules_path: String,
     update_interval_secs: u64,
+    circuit_breaker: CircuitBreaker,
+    cached_data: Option<Vec<u8>>,
 }
 
 fn parse_sigma_rules(text: &str) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
@@ -62,6 +127,8 @@ impl RuleUpdater {
             last_update: None,
             local_rules_path: local_path.to_string(),
             update_interval_secs: 3600,
+            circuit_breaker: CircuitBreaker::new(5, 60),
+            cached_data: None,
         }
     }
 
@@ -92,6 +159,14 @@ impl RuleUpdater {
         &self,
         feed: &UpdateFeed,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+        if !self.circuit_breaker.is_available() {
+            warn!(feed = %feed.name, "Circuit breaker open, returning cached data");
+            if let Some(ref cached) = self.cached_data {
+                return Ok(cached.clone());
+            }
+            return Err("Circuit breaker open, no cached data available".into());
+        }
+
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(60))
             .user_agent("RoyalSecurity-RuleUpdater/0.1")
@@ -165,10 +240,13 @@ impl RuleUpdater {
         for feed in &feeds_to_update {
             match self.download_feed(feed).await {
                 Ok(data) => {
+                    self.circuit_breaker.record_success();
+                    self.cached_data = Some(data.clone());
                     let result = self.apply_update(feed, &data);
                     results.push(result);
                 }
                 Err(e) => {
+                    self.circuit_breaker.record_failure();
                     warn!(feed = %feed.name, error = %e, "Failed to download feed");
                     results.push(UpdateResult {
                         feed_name: feed.name.clone(),
@@ -530,5 +608,52 @@ level: high
         };
         assert!(!result.success);
         assert_eq!(result.errors.len(), 1);
+    }
+
+    #[test]
+    fn test_circuit_breaker_closed_by_default() {
+        let cb = CircuitBreaker::new(5, 60);
+        assert!(cb.is_available());
+    }
+
+    #[test]
+    fn test_circuit_breaker_trips_after_max_failures() {
+        let cb = CircuitBreaker::new(3, 60);
+        assert!(cb.is_available());
+        cb.record_failure();
+        assert!(cb.is_available());
+        cb.record_failure();
+        assert!(cb.is_available());
+        cb.record_failure();
+        assert!(!cb.is_available());
+    }
+
+    #[test]
+    fn test_circuit_breaker_records_success_resets() {
+        let cb = CircuitBreaker::new(3, 60);
+        cb.record_failure();
+        cb.record_failure();
+        cb.record_success();
+        assert!(cb.is_available());
+    }
+
+    #[test]
+    fn test_circuit_breaker_half_open_on_timeout() {
+        let cb = CircuitBreaker::new(2, 1);
+        cb.record_failure();
+        cb.record_failure();
+        assert!(!cb.is_available());
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        assert!(cb.is_available());
+    }
+
+    #[test]
+    fn test_circuit_breaker_record_success_closes() {
+        let cb = CircuitBreaker::new(2, 60);
+        cb.record_failure();
+        cb.record_failure();
+        assert!(!cb.is_available());
+        cb.record_success();
+        assert!(cb.is_available());
     }
 }

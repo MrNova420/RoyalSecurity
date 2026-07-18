@@ -1,6 +1,7 @@
 ﻿pub mod feed;
 pub mod feeds;
 pub mod matcher;
+pub mod mmap_store;
 pub mod stix;
 pub mod updater;
 

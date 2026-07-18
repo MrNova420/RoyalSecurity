@@ -1,7 +1,9 @@
-﻿pub mod bus;
+﻿pub mod arena;
+pub mod bus;
 pub mod config;
 pub mod crypto;
 pub mod audit;
+pub mod hotreload;
 pub mod module;
 pub mod ppl;
 pub mod registry;

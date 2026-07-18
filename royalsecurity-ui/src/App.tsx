@@ -4,7 +4,7 @@ import {
   FileSearch, Settings, BarChart3, Database,
   Scale, ChevronLeft, ChevronRight, Cpu
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Dashboard from './pages/Dashboard';
 import Threats from './pages/Threats';
 import Processes from './pages/Processes';
@@ -13,6 +13,10 @@ import Rules from './pages/Rules';
 import Compliance from './pages/Compliance';
 import AuditLog from './pages/AuditLog';
 import SettingsPage from './pages/Settings';
+import NotificationToast from './components/NotificationToast';
+import { useNotifications } from './hooks/useNotifications';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useEventStream } from './hooks/useEventStream';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: BarChart3 },
@@ -72,29 +76,70 @@ function TitleBar() {
   );
 }
 
-export default function App() {
+function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
+  const { notifications, addNotification, dismissNotification } = useNotifications();
+  const { setRefreshCallback, setEscapeCallback } = useKeyboardShortcuts();
+  const { events } = useEventStream();
+  const prevEventCountRef = useRef(0);
+
+  useEffect(() => {
+    setRefreshCallback(() => {
+      window.dispatchEvent(new CustomEvent('royalsecurity:refresh'));
+    });
+    setEscapeCallback(() => {
+      window.dispatchEvent(new CustomEvent('royalsecurity:escape'));
+    });
+    return () => {
+      setRefreshCallback(null);
+      setEscapeCallback(null);
+    };
+  }, [setRefreshCallback, setEscapeCallback]);
+
+  useEffect(() => {
+    if (events.length === 0 || events.length < prevEventCountRef.current) {
+      prevEventCountRef.current = events.length;
+      return;
+    }
+    const newEvents = events.slice(0, events.length - prevEventCountRef.current);
+    prevEventCountRef.current = events.length;
+
+    for (const evt of newEvents) {
+      if (evt.severity === 'critical') {
+        addNotification(`${evt.title} [CRITICAL] - ${evt.source}`, 'error');
+      } else if (evt.severity === 'high') {
+        addNotification(`${evt.title} - ${evt.source}`, 'warning');
+      }
+    }
+  }, [events, addNotification]);
 
   return (
-    <BrowserRouter>
-      <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <TitleBar />
-          <main className="flex-1 overflow-y-auto p-6">
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/threats" element={<Threats />} />
-              <Route path="/processes" element={<Processes />} />
-              <Route path="/network" element={<NetworkPage />} />
-              <Route path="/rules" element={<Rules />} />
-              <Route path="/compliance" element={<Compliance />} />
-              <Route path="/audit" element={<AuditLog />} />
-              <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
-          </main>
-        </div>
+    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <Sidebar collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TitleBar />
+        <main className="flex-1 overflow-y-auto p-6">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/threats" element={<Threats />} />
+            <Route path="/processes" element={<Processes />} />
+            <Route path="/network" element={<NetworkPage />} />
+            <Route path="/rules" element={<Rules />} />
+            <Route path="/compliance" element={<Compliance />} />
+            <Route path="/audit" element={<AuditLog />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
       </div>
+      <NotificationToast notifications={notifications} onDismiss={dismissNotification} />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
     </BrowserRouter>
   );
 }
