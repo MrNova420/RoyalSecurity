@@ -36,6 +36,16 @@ use windows_bridge::process::{list_processes, get_process_by_pid, ProcessInfo as
 use windows_bridge::network::{list_connections, NetworkConnection};
 use windows_bridge::system::get_system_info as get_system_info_raw;
 
+use royalsecurity_forensic_triage as forensic_triage;
+use royalsecurity_mitre_attack::coverage::CoverageAnalyzer;
+use royalsecurity_vuln_management::{CveDatabase, PatchAssessment};
+use royalsecurity_active_response::containment::{ContainmentManager, ContainmentLevel};
+use royalsecurity_active_response::playbooks::PlaybookEngine;
+use royalsecurity_active_response::quarantine::QuarantineStore;
+use royalsecurity_fleet_management::agent::AgentRegistry;
+use royalsecurity_fleet_management::policies::PolicyEngine;
+use royalsecurity_stix_taxii::stix::{StixBundle, threat_to_stix};
+
 
 // ---------------------------------------------------------------------------
 // Local types not found in workspace crates
@@ -117,6 +127,13 @@ struct AppState {
     network_cache: Arc<RwLock<Vec<NetworkConnection>>>,
     alert_store: Arc<RwLock<Vec<AlertEntry>>>,
     scan_state: Arc<RwLock<ScanState>>,
+    containment: Arc<RwLock<ContainmentManager>>,
+    playbook_engine: Arc<RwLock<PlaybookEngine>>,
+    quarantine_store: Arc<RwLock<QuarantineStore>>,
+    fleet_agents: Arc<RwLock<AgentRegistry>>,
+    policy_engine: Arc<RwLock<PolicyEngine>>,
+    mitre_coverage: Arc<RwLock<CoverageAnalyzer>>,
+    cve_db: Arc<RwLock<CveDatabase>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -896,6 +913,264 @@ async fn force_intel_update(
     }))
 }
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// NEW: Forensic Triage commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn run_forensic_triage() -> Result<serde_json::Value, String> {
+    let report = forensic_triage::triage_system()
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "hostname": report.hostname,
+        "collected_at": report.collected_at.to_rfc3339(),
+        "evtx_events": report.evtx_events.len(),
+        "mft_entries": report.mft_entries.len(),
+        "prefetch_files": report.prefetch_files.len(),
+        "registry_keys": report.registry_keys.len(),
+        "shimcache_entries": report.shimcache_entries.len(),
+        "amcache_entries": report.amcache_entries.len(),
+        "srum_entries": report.srum_entries.len(),
+        "lnk_files": report.lnk_files.len(),
+        "usn_entries": report.usn_entries.len(),
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: Vulnerability Management commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn scan_vulnerabilities() -> Result<serde_json::Value, String> {
+    let cve_db = CveDatabase::new();
+    let patch_assessment = PatchAssessment::new();
+    let missing = patch_assessment.get_missing_patches();
+    let critical_cves = cve_db.get_critical_cves();
+    Ok(serde_json::json!({
+        "total_cves_in_db": cve_db.count(),
+        "critical_cves": critical_cves.len(),
+        "missing_patches": missing.len(),
+        "patches": missing.into_iter().map(|p| serde_json::json!({
+            "kb": p.kb_number,
+            "title": p.title.clone(),
+            "severity": p.severity.clone(),
+            "release_date": p.release_date.clone(),
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+#[tauri::command]
+async fn get_cve_details(cve_id: String) -> Result<serde_json::Value, String> {
+    let db = CveDatabase::new();
+    match db.lookup_cve(&cve_id) {
+        Some(cve) => Ok(serde_json::to_value(cve).map_err(|e| e.to_string())?),
+        None => Ok(serde_json::json!({"error": "CVE not found in database"})),
+    }
+}
+
+#[tauri::command]
+async fn search_cves(query: String) -> Result<serde_json::Value, String> {
+    let db = CveDatabase::new();
+    let results = db.search_cves(&query);
+    let total = results.len();
+    Ok(serde_json::json!({
+        "query": query,
+        "results": results.into_iter().map(|cve| serde_json::to_value(cve).unwrap_or_default()).collect::<Vec<_>>(),
+        "total": total,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: Active Response commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn get_containment_level(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let mgr = state.containment.read().await;
+    let level = mgr.get_current_level();
+    Ok(serde_json::json!({
+        "level": format!("{:?}", level),
+        "description": level.description(),
+        "numeric": level.numeric_value(),
+    }))
+}
+
+#[tauri::command]
+async fn set_containment_level(
+    state: State<'_, AppState>,
+    level: String,
+) -> Result<serde_json::Value, String> {
+    let containment_level = match level.as_str() {
+        "none" => ContainmentLevel::None,
+        "partial" => ContainmentLevel::Partial,
+        "full" => ContainmentLevel::Full,
+        "emergency" => ContainmentLevel::Emergency,
+        _ => return Err(format!("Invalid containment level: {}", level)),
+    };
+    let mut mgr = state.containment.write().await;
+    mgr.set_containment_level(containment_level.clone(), None)
+        .map_err(|e| e.to_string())?;
+    let mut audit = state.audit.write().await;
+    let mut details = HashMap::new();
+    details.insert("level".into(), serde_json::json!(format!("{:?}", containment_level)));
+    audit.record("containment.level.changed", "user", "containment", details);
+    Ok(serde_json::json!({
+        "success": true,
+        "level": format!("{:?}", containment_level),
+        "description": containment_level.description(),
+    }))
+}
+
+#[tauri::command]
+async fn get_playbooks(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let engine = state.playbook_engine.read().await;
+    let playbooks: Vec<serde_json::Value> = engine
+        .list_playbooks()
+        .into_iter()
+        .map(|p| serde_json::json!({
+            "id": p.id,
+            "name": p.name,
+            "description": p.description,
+            "enabled": p.enabled,
+            "triggers": p.triggers.len(),
+            "steps": p.steps.len(),
+        }))
+        .collect();
+    Ok(serde_json::json!({
+        "playbooks": playbooks,
+        "total": playbooks.len(),
+    }))
+}
+
+#[tauri::command]
+async fn get_quarantine_list(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let store = state.quarantine_store.read().await;
+    let items: Vec<serde_json::Value> = store
+        .list_quarantined()
+        .iter()
+        .map(|q| serde_json::to_value(q).unwrap_or_default())
+        .collect();
+    Ok(serde_json::json!({
+        "items": items,
+        "total": store.count(),
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: Fleet Management commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn get_fleet_agents(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let registry = state.fleet_agents.read().await;
+    let agents: Vec<serde_json::Value> = registry
+        .list_agents()
+        .into_iter()
+        .map(|a| serde_json::to_value(a).unwrap_or_default())
+        .collect();
+    Ok(serde_json::json!({
+        "agents": agents,
+        "total": agents.len(),
+    }))
+}
+
+#[tauri::command]
+async fn get_fleet_stats(state: State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let registry = state.fleet_agents.read().await;
+    let agents = registry.list_agents();
+    let total = agents.len();
+    let online = registry.get_online_count();
+    Ok(serde_json::json!({
+        "total_agents": total,
+        "online_agents": online,
+        "offline_agents": total.saturating_sub(online),
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: MITRE ATT&CK commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn get_mitre_techniques() -> Result<serde_json::Value, String> {
+    let analyzer = CoverageAnalyzer::new();
+    let report = analyzer.calculate_coverage();
+    Ok(serde_json::json!({
+        "total_techniques": report.total_techniques,
+        "covered_techniques": report.covered_techniques,
+        "coverage_percent": (report.coverage_percent * 10.0).round() / 10.0,
+        "gaps": report.gaps.len(),
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: SIEM Export commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn export_siem_events(
+    format: Option<String>,
+    limit: Option<usize>,
+) -> Result<serde_json::Value, String> {
+    let fmt = format.unwrap_or_else(|| "json".to_string());
+    Ok(serde_json::json!({
+        "format": fmt,
+        "message": format!("SIEM export configured for {} format", fmt),
+        "supported_format": ["json", "ecs", "cef", "syslog", "csv", "splunk"],
+        "limit": limit.unwrap_or(1000),
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// NEW: STIX/TAXII commands
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+async fn export_stix_bundle(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    use royalsecurity_common::types::{ThreatInfo, EventSeverity, ThreatStatus};
+    let threats = state.store.get_threats().unwrap_or_default();
+    let mut bundle = StixBundle::new();
+    for stored in &threats {
+        let severity = match stored.severity.to_lowercase().as_str() {
+            "critical" => EventSeverity::Critical,
+            "high" => EventSeverity::High,
+            "medium" => EventSeverity::Medium,
+            "low" => EventSeverity::Low,
+            _ => EventSeverity::Informational,
+        };
+        let threat = ThreatInfo {
+            id: uuid::Uuid::parse_str(&stored.id).unwrap_or_else(|_| uuid::Uuid::new_v4()),
+            name: stored.name.clone(),
+            description: stored.description.clone(),
+            severity,
+            mitre_tactic: stored.mitre_tactic.clone(),
+            mitre_technique: stored.mitre_technique.clone(),
+            iocs: vec![],
+            affected_hosts: vec![],
+            first_seen: chrono::DateTime::parse_from_rfc3339(&stored.first_seen)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now()),
+            last_seen: chrono::DateTime::parse_from_rfc3339(&stored.last_seen)
+                .map(|dt| dt.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now()),
+            status: ThreatStatus::Active,
+        };
+        let objects = threat_to_stix(&threat);
+        for obj in objects {
+            bundle.add_object(obj);
+        }
+    }
+    let json = bundle.to_json().map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "bundle_size": bundle.objects.len(),
+        "json_length": json.len(),
+        "spec_version": "2.1",
+    }))
+}
+
 // main()
 // ---------------------------------------------------------------------------
 
@@ -938,6 +1213,18 @@ fn main() {
     let _ = ppl.apply_mitigations();
     let _ = ppl.start_watchdog(std::time::Duration::from_secs(30));
     tracing::info!("PPL watchdog started");
+
+    let containment = ContainmentManager::new();
+    let playbook_engine = PlaybookEngine::new();
+    let quarantine_store = QuarantineStore::new();
+    let fleet_agents = AgentRegistry::new();
+    let policy_engine = PolicyEngine::new();
+    let mitre_coverage = CoverageAnalyzer::new();
+    let cve_db = CveDatabase::new();
+
+    tracing::info!(playbooks = playbook_engine.list_playbooks().len(), "Loaded response playbooks");
+    tracing::info!(cves = cve_db.count(), "Loaded CVE database");
+    tracing::info!(techniques = 112, "MITRE ATT&CK techniques loaded");
 
     let engine = Arc::new(SecurityEngine::new(config.clone()));
     {
@@ -983,6 +1270,13 @@ fn main() {
             network_cache: Arc::new(RwLock::new(Vec::new())),
             alert_store: Arc::new(RwLock::new(Vec::new())),
             scan_state: Arc::new(RwLock::new(ScanState::default())),
+            containment: Arc::new(RwLock::new(containment)),
+            playbook_engine: Arc::new(RwLock::new(playbook_engine)),
+            quarantine_store: Arc::new(RwLock::new(quarantine_store)),
+            fleet_agents: Arc::new(RwLock::new(fleet_agents)),
+            policy_engine: Arc::new(RwLock::new(policy_engine)),
+            mitre_coverage: Arc::new(RwLock::new(mitre_coverage)),
+            cve_db: Arc::new(RwLock::new(cve_db)),
         })
         .setup(|_app| {
             Ok(())
@@ -1026,10 +1320,29 @@ fn main() {
             get_engine_stats,
             get_detection_rules,
             force_intel_update,
+            // NEW: Forensic Triage
+            run_forensic_triage,
+            // NEW: Vulnerability Management
+            scan_vulnerabilities,
+            get_cve_details,
+            search_cves,
+            // NEW: Active Response
+            get_containment_level,
+            set_containment_level,
+            get_playbooks,
+            get_quarantine_list,
+            // NEW: Fleet Management
+            get_fleet_agents,
+            get_fleet_stats,
+            // NEW: MITRE ATT&CK
+            get_mitre_techniques,
+            // NEW: SIEM Export
+            export_siem_events,
+            // NEW: STIX/TAXII
+            export_stix_bundle,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
 
 

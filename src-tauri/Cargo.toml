@@ -23,6 +23,14 @@ royalsecurity-compliance = { path = "../crates/compliance" }
 royalsecurity-forensic = { path = "../crates/forensic" }
 windows-bridge = { path = "../crates/windows-bridge" }
 royalsecurity-agent-service = { path = "../crates/agent-service" }
+royalsecurity-forensic-triage = { path = "../crates/forensic-triage" }
+royalsecurity-rest-api = { path = "../crates/rest-api" }
+royalsecurity-siem-export = { path = "../crates/siem-export" }
+royalsecurity-fleet-management = { path = "../crates/fleet-management" }
+royalsecurity-active-response = { path = "../crates/active-response" }
+royalsecurity-mitre-attack = { path = "../crates/mitre-attack" }
+royalsecurity-stix-taxii = { path = "../crates/stix-taxii" }
+royalsecurity-vuln-management = { path = "../crates/vuln-management" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

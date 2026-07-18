@@ -2,7 +2,8 @@
 import {
   Shield, Activity, AlertTriangle, Network,
   FileSearch, Settings, BarChart3, Database,
-  Scale, ChevronLeft, ChevronRight, Cpu
+  Scale, ChevronLeft, ChevronRight, Cpu,
+  Microscope, Bug, ShieldAlert, Server, Download
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +14,11 @@ import Rules from './pages/Rules';
 import Compliance from './pages/Compliance';
 import AuditLog from './pages/AuditLog';
 import SettingsPage from './pages/Settings';
+import Forensics from './pages/Forensics';
+import VulnScan from './pages/VulnScan';
+import ActiveResponse from './pages/ActiveResponse';
+import Fleet from './pages/Fleet';
+import SiemExport from './pages/SiemExport';
 import SetupWizard from './components/SetupWizard';
 import NotificationToast from './components/NotificationToast';
 import { useNotifications } from './hooks/useNotifications';
@@ -26,6 +32,11 @@ const navItems = [
   { path: '/processes', label: 'Processes', icon: Activity },
   { path: '/network', label: 'Network', icon: Network },
   { path: '/rules', label: 'Rules', icon: FileSearch },
+  { path: '/forensics', label: 'Forensics', icon: Microscope },
+  { path: '/vulnerabilities', label: 'Vulnerabilities', icon: Bug },
+  { path: '/active-response', label: 'Active Response', icon: ShieldAlert },
+  { path: '/fleet', label: 'Fleet', icon: Server },
+  { path: '/siem-export', label: 'SIEM Export', icon: Download },
   { path: '/compliance', label: 'Compliance', icon: Scale },
   { path: '/audit', label: 'Audit Log', icon: Database },
   { path: '/settings', label: 'Settings', icon: Settings },
@@ -155,6 +166,11 @@ function AppShell() {
             <Route path="/processes" element={<Processes />} />
             <Route path="/network" element={<NetworkPage />} />
             <Route path="/rules" element={<Rules />} />
+            <Route path="/forensics" element={<Forensics />} />
+            <Route path="/vulnerabilities" element={<VulnScan />} />
+            <Route path="/active-response" element={<ActiveResponse />} />
+            <Route path="/fleet" element={<Fleet />} />
+            <Route path="/siem-export" element={<SiemExport />} />
             <Route path="/compliance" element={<Compliance />} />
             <Route path="/audit" element={<AuditLog />} />
             <Route path="/settings" element={<SettingsPage />} />

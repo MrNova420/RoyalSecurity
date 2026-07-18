@@ -272,3 +272,56 @@ export async function encryptData(data: string, keyId: string) {
 export async function decryptData(data: string, keyId: string) {
   return invokeCommand<{ decrypted: string }>('decrypt_data', { data, keyId });
 }
+
+// --- NEW: Forensic Triage ---
+export async function runForensicTriage() {
+  return invokeCommand<unknown>('run_forensic_triage');
+}
+
+// --- NEW: Vulnerability Management ---
+export async function scanVulnerabilities() {
+  return invokeCommand<unknown>('scan_vulnerabilities');
+}
+export async function getCveDetails(cveId: string) {
+  return invokeCommand<unknown>('get_cve_details', { cveId });
+}
+export async function searchCves(query: string) {
+  return invokeCommand<unknown>('search_cves', { query });
+}
+
+// --- NEW: Active Response ---
+export async function getContainmentLevel() {
+  return invokeCommand<string>('get_containment_level');
+}
+export async function setContainmentLevel(level: string) {
+  return invokeCommand<void>('set_containment_level', { level });
+}
+export async function getPlaybooks() {
+  return invokeCommand<unknown[]>('get_playbooks');
+}
+export async function getQuarantineList() {
+  return invokeCommand<unknown[]>('get_quarantine_list');
+}
+
+// --- NEW: Fleet Management ---
+export async function getFleetAgents() {
+  return invokeCommand<unknown[]>('get_fleet_agents');
+}
+export async function getFleetStats() {
+  return invokeCommand<unknown>('get_fleet_stats');
+}
+
+// --- NEW: MITRE ATT&CK ---
+export async function getMitreTechniques() {
+  return invokeCommand<unknown[]>('get_mitre_techniques');
+}
+
+// --- NEW: SIEM Export ---
+export async function exportSiemEvents(format?: string, limit?: number) {
+  return invokeCommand<unknown>('export_siem_events', { format, limit });
+}
+
+// --- NEW: STIX/TAXII ---
+export async function exportStixBundle() {
+  return invokeCommand<unknown>('export_stix_bundle');
+}
