@@ -21,6 +21,7 @@ Desktop.ini
 
 # Build artifacts
 *.pdb
+*.exe
 *.exe.bak
 
 # Runtime data (local dev)
