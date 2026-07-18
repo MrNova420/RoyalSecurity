@@ -1,3 +1,10 @@
 ﻿pub use royalsecurity_core as core;
 pub use royalsecurity_common as common;
-
+pub use super::FilelessDetector;
+pub use super::FilelessConfig;
+pub use super::ScriptBlock;
+pub use super::AmsiEvent;
+pub use super::AmsiScanResult;
+pub use super::FilelessAttackType;
+pub use super::FilelessDetection;
+pub use super::ObfuscationIndicator;
