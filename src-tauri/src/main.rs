@@ -1337,6 +1337,42 @@ fn main() {
         });
     }
 
+    {
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            tracing::info!("Starting real-time collectors");
+
+            let sysmon = royalsecurity_collector_sysmon::SysmonCollector::new(
+                royalsecurity_core::bus::EventBus::new(),
+            );
+            let _ = sysmon.start().await;
+
+            let mut log_collector = royalsecurity_collector_log::LogCollector::new(
+                royalsecurity_core::bus::EventBus::new(),
+            );
+            let _ = log_collector.start();
+
+            tracing::info!("Real-time collectors initialized");
+
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+                #[cfg(target_os = "windows")]
+                {
+                    let sysmon_count = sysmon.poll_real_events();
+                    if sysmon_count > 0 {
+                        tracing::info!(count = sysmon_count, "Sysmon events collected from real event log");
+                    }
+
+                    let log_count = log_collector.poll_real_events();
+                    if log_count > 0 {
+                        tracing::info!(count = log_count, "Windows Event Log entries collected");
+                    }
+                }
+            }
+        });
+    }
+
     tracing::info!(
         app_name = %config.general.app_name,
         version = %config.general.version,

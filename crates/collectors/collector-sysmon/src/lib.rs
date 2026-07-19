@@ -1,12 +1,17 @@
-﻿pub mod prelude;
+pub mod prelude;
 pub use royalsecurity_core as core;
 
 use chrono::{DateTime, Utc};
+use royalsecurity_common::types::*;
+use royalsecurity_core::bus::EventBus;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+#[cfg(target_os = "windows")]
+use windows::Win32::System::EventLog::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SysmonEvent {
@@ -28,15 +33,20 @@ pub enum SysmonCollectorError {
 }
 
 pub struct SysmonCollector {
+    bus: Arc<EventBus>,
     running: Arc<RwLock<bool>>,
     events: Arc<RwLock<Vec<SysmonEvent>>>,
+    #[allow(dead_code)]
+    last_event_record_id: Arc<RwLock<u64>>,
 }
 
 impl SysmonCollector {
-    pub fn new() -> Self {
+    pub fn new(bus: EventBus) -> Self {
         Self {
+            bus: Arc::new(bus),
             running: Arc::new(RwLock::new(false)),
             events: Arc::new(RwLock::new(Vec::new())),
+            last_event_record_id: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -106,7 +116,7 @@ impl SysmonCollector {
 
     pub async fn capture_event(&self, event: SysmonEvent) -> std::result::Result<(), SysmonCollectorError> {
         if !*self.running.read().await {
-            return Err(SysmonCollectorError::NotStarted.into());
+            return Err(SysmonCollectorError::NotStarted);
         }
         debug!(
             event_id = event.event_id,
@@ -114,9 +124,157 @@ impl SysmonCollector {
             user = %event.user,
             "Captured Sysmon event"
         );
+        self.publish_to_bus(&event);
         let mut events = self.events.write().await;
         events.push(event);
         Ok(())
+    }
+
+    fn publish_to_bus(&self, sysmon_event: &SysmonEvent) {
+        let security_event = match sysmon_event.event_id {
+            1 => {
+                let path = sysmon_event.details.get("Image").cloned().unwrap_or_default();
+                let cmd = sysmon_event.details.get("CommandLine").cloned().unwrap_or_default();
+                SecurityEvent::Process(ProcessInfo {
+                    pid: sysmon_event.process_id,
+                    ppid: sysmon_event.details.get("ParentProcessId")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0),
+                    name: path.rsplit(['\\', '/']).next().unwrap_or(&path).to_string(),
+                    path,
+                    command_line: cmd,
+                    user: sysmon_event.user.clone(),
+                    hash_sha256: sysmon_event.details.get("Hashes")
+                        .and_then(|h| h.strip_prefix("SHA256="))
+                        .map(|s| s.to_string()),
+                    integrity_level: sysmon_event.details.get("IntegrityLevel").cloned(),
+                    timestamp: sysmon_event.timestamp,
+                })
+            }
+            3 => {
+                let src_ip = sysmon_event.details.get("SourceIp").and_then(|s| s.parse().ok());
+                let dst_ip = sysmon_event.details.get("DestinationIp").and_then(|s| s.parse().ok());
+                SecurityEvent::Network(NetworkEvent {
+                    src_ip,
+                    dst_ip,
+                    src_port: sysmon_event.details.get("SourcePort")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0),
+                    dst_port: sysmon_event.details.get("DestinationPort")
+                        .and_then(|v| v.parse().ok())
+                        .unwrap_or(0),
+                    protocol: Protocol::Tcp,
+                    process_name: sysmon_event.details.get("Image").cloned(),
+                    process_pid: Some(sysmon_event.process_id),
+                    ..NetworkEvent::default()
+                })
+            }
+            11 => {
+                let path = sysmon_event.details.get("TargetFilename").cloned().unwrap_or_default();
+                SecurityEvent::File(FileEvent {
+                    path,
+                    action: FileAction::Created,
+                    timestamp: sysmon_event.timestamp,
+                    ..FileEvent::default()
+                })
+            }
+            13 => {
+                let key = sysmon_event.details.get("TargetObject").cloned().unwrap_or_default();
+                SecurityEvent::Registry(RegistryEvent {
+                    key_path: key,
+                    value_name: sysmon_event.details.get("Details").cloned(),
+                    action: RegistryAction::Modified,
+                    timestamp: sysmon_event.timestamp,
+                    ..RegistryEvent::default()
+                })
+            }
+            _ => {
+                SecurityEvent::Process(ProcessInfo {
+                    pid: sysmon_event.process_id,
+                    name: format!("sysmon-event-{}", sysmon_event.event_id),
+                    user: sysmon_event.user.clone(),
+                    timestamp: sysmon_event.timestamp,
+                    ..ProcessInfo::default()
+                })
+            }
+        };
+
+        if let Err(e) = self.bus.publish(security_event) {
+            warn!("Failed to publish Sysmon event to bus: {}", e);
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn poll_real_events(&self) -> u32 {
+        use windows::core::PCWSTR;
+
+        let mut count = 0u32;
+        unsafe {
+            let path_wide: Vec<u16> = "Microsoft-Windows-Sysmon/Operational"
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect();
+
+            let result_set = match EvtQuery(
+                EVT_HANDLE(0),
+                PCWSTR(path_wide.as_ptr()),
+                PCWSTR::null(),
+                0x0001,
+            ) {
+                Ok(h) if h.0 != 0 => h,
+                _ => return 0,
+            };
+
+            let mut event_handles: Vec<isize> = vec![0isize; 64];
+            let mut returned = 0u32;
+
+            while EvtNext(result_set, &mut event_handles, 100, 0, &mut returned).is_ok() && returned > 0 {
+                for i in 0..returned as usize {
+                    let evt_handle = EVT_HANDLE(event_handles[i]);
+                    if evt_handle.0 == 0 {
+                        continue;
+                    }
+
+                    let mut used = 0u32;
+                    let mut prop_count = 0u32;
+
+                    if EvtRender(
+                        EVT_HANDLE(0),
+                        evt_handle,
+                        0x00000001,
+                        0,
+                        None,
+                        &mut used,
+                        &mut prop_count,
+                    ).is_err() {
+                        let mut buf = vec![0u8; used as usize];
+                        if EvtRender(
+                            EVT_HANDLE(0),
+                            evt_handle,
+                            0x00000001,
+                            used,
+                            Some(buf.as_mut_ptr() as *mut _),
+                            &mut used,
+                            &mut prop_count,
+                        ).is_ok() {
+                            if let Ok(xml) = std::string::String::from_utf8(buf) {
+                                if let Some(event) = Self::parse_event(&xml) {
+                                    self.publish_to_bus(&event);
+                                    let mut events = self.events.blocking_write();
+                                    events.push(event);
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+
+                    let _ = EvtClose(evt_handle);
+                }
+            }
+
+            let _ = EvtClose(result_set);
+        }
+        count
     }
 
     pub async fn get_events(&self) -> Vec<SysmonEvent> {
@@ -145,7 +303,7 @@ impl SysmonCollector {
 
 impl Default for SysmonCollector {
     fn default() -> Self {
-        Self::new()
+        Self::new(EventBus::new())
     }
 }
 
@@ -199,7 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_stop() {
-        let collector = SysmonCollector::new();
+        let collector = SysmonCollector::new(EventBus::new());
         assert!(!collector.is_running().await);
         collector.start().await.unwrap();
         assert!(collector.is_running().await);
@@ -209,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_capture_requires_running() {
-        let collector = SysmonCollector::new();
+        let collector = SysmonCollector::new(EventBus::new());
         let event = SysmonEvent {
             event_id: 1,
             process_id: 100,
@@ -222,7 +380,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_capture_and_count() {
-        let collector = SysmonCollector::new();
+        let collector = SysmonCollector::new(EventBus::new());
         collector.start().await.unwrap();
         for i in 0..5 {
             let event = SysmonEvent {
@@ -239,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_events_by_id() {
-        let collector = SysmonCollector::new();
+        let collector = SysmonCollector::new(EventBus::new());
         collector.start().await.unwrap();
         for id in [1, 2, 1, 3, 1] {
             let event = SysmonEvent {
@@ -259,7 +417,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_clear() {
-        let collector = SysmonCollector::new();
+        let collector = SysmonCollector::new(EventBus::new());
         collector.start().await.unwrap();
         let event = SysmonEvent {
             event_id: 1,

@@ -31,6 +31,9 @@ royalsecurity-active-response = { path = "../crates/active-response" }
 royalsecurity-mitre-attack = { path = "../crates/mitre-attack" }
 royalsecurity-stix-taxii = { path = "../crates/stix-taxii" }
 royalsecurity-vuln-management = { path = "../crates/vuln-management" }
+royalsecurity-collector-etw = { path = "../crates/collectors/collector-etw" }
+royalsecurity-collector-sysmon = { path = "../crates/collectors/collector-sysmon" }
+royalsecurity-collector-log = { path = "../crates/collectors/collector-log" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

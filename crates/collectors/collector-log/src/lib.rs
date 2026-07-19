@@ -7,11 +7,17 @@ use royalsecurity_core::module::{SecurityModule, ModuleConfig};
 use royalsecurity_core::bus::EventBus;
 use std::collections::HashMap;
 use std::error::Error;
+use std::sync::Arc;
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 use chrono::{DateTime, Utc};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg(target_os = "windows")]
+use windows::Win32::System::EventLog::*;
+#[cfg(target_os = "windows")]
+use windows::core::PCWSTR;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize, strum_macros::Display)]
 pub enum LogSource {
     Security,
     System,
@@ -40,7 +46,7 @@ pub struct LogEntry {
 }
 
 pub struct LogCollector {
-    _bus: EventBus,
+    bus: Arc<EventBus>,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -53,7 +59,7 @@ pub struct LogCollector {
 impl LogCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            _bus: bus,
+            bus: Arc::new(bus),
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,
@@ -91,10 +97,48 @@ impl LogCollector {
     }
 
     pub fn collect_entry(&mut self, entry: LogEntry) {
+        self.publish_to_bus(&entry);
         if self.entries.len() >= self.max_entries {
             self.entries.remove(0);
         }
         self.entries.push(entry);
+    }
+
+    fn publish_to_bus(&self, entry: &LogEntry) {
+        let _severity = match entry.level.to_lowercase().as_str() {
+            "error" | "critical" | "audit failure" => EventSeverity::High,
+            "warning" | "audit success" => EventSeverity::Medium,
+            _ => EventSeverity::Informational,
+        };
+
+        let _event_type = match entry.event_id {
+            4624 => EventType::AuthSuccess,
+            4625 => EventType::AuthFailure,
+            4672 => EventType::PrivilegeEscalation,
+            4688 => EventType::ProcessCreated,
+            4689 => EventType::ProcessTerminated,
+            4697 => EventType::ServiceCreated,
+            4698 => EventType::ScheduledTaskCreated,
+            4720 => EventType::ServiceCreated,
+            4732 => EventType::LateralMovement,
+            7034 => EventType::ServiceStopped,
+            7036 => EventType::ServiceStarted,
+            1102 => EventType::ServiceStopped,
+            _ => EventType::ProcessCreated,
+        };
+
+        let security_event = SecurityEvent::Process(ProcessInfo {
+            pid: 0,
+            name: format!("{}:{}", entry.source, entry.event_id),
+            command_line: entry.message.clone(),
+            user: entry.provider.clone(),
+            timestamp: entry.timestamp,
+            ..ProcessInfo::default()
+        });
+
+        if let Err(e) = self.bus.publish(security_event) {
+            warn!("Failed to publish log event to bus: {}", e);
+        }
     }
 
     pub fn get_entries(&self) -> Vec<&LogEntry> {
@@ -153,6 +197,150 @@ impl LogCollector {
             *counts.entry(entry.source.clone()).or_insert(0) += 1;
         }
         counts
+    }
+
+    #[cfg(target_os = "windows")]
+    fn source_to_channel(source: &LogSource) -> &'static str {
+        match source {
+            LogSource::Security => "Security",
+            LogSource::System => "System",
+            LogSource::Application => "Application",
+            LogSource::PowerShell => "Windows PowerShell",
+            LogSource::Sysmon => "Microsoft-Windows-Sysmon/Operational",
+            LogSource::WmiActivity => "Microsoft-Windows-WMI-Activity/Operational",
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn event_type_to_string(event_type: u32) -> String {
+        match event_type {
+            1 => "Error".into(),
+            2 => "Warning".into(),
+            3 => "Information".into(),
+            4 => "Audit Success".into(),
+            5 => "Audit Failure".into(),
+            _ => format!("Unknown({})", event_type),
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn parse_eventlogrecord(record: &EVENTLOGRECORD, source: LogSource) -> Option<LogEntry> {
+        if record.NumStrings == 0 {
+            return None;
+        }
+
+        let data = unsafe {
+            let data_ptr = (record as *const EVENTLOGRECORD as *const u8)
+                .add(record.StringOffset as usize);
+            let data_len = record.Length as usize - record.StringOffset as usize;
+            std::slice::from_raw_parts(data_ptr, data_len)
+        };
+
+        let message = if let Some(first_null) = data.iter().position(|&b| b == 0) {
+            String::from_utf16_lossy(
+                data[..first_null]
+                    .chunks(2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect::<Vec<u16>>()
+                    .as_slice(),
+            )
+        } else {
+            String::from_utf16_lossy(
+                data.chunks(2)
+                    .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                    .collect::<Vec<u16>>()
+                    .as_slice(),
+            )
+        };
+
+        let timestamp = chrono::DateTime::from_timestamp(record.TimeGenerated as i64, 0)
+            .unwrap_or_else(Utc::now);
+
+        Some(LogEntry {
+            source,
+            level: Self::event_type_to_string(record.EventType.0.into()),
+            message,
+            event_id: record.EventID & 0xFFFF,
+            provider: format!("EventRecord#{}", record.RecordNumber),
+            timestamp,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn poll_real_events(&mut self) -> u32 {
+        let mut count = 0u32;
+        let channels = [
+            LogSource::Security,
+            LogSource::System,
+            LogSource::Application,
+        ];
+
+        for source in &channels {
+            let channel_name = Self::source_to_channel(source);
+            let channel_wide: Vec<u16> = channel_name.encode_utf16().chain(std::iter::once(0)).collect();
+
+            let hlog = unsafe {
+                match OpenEventLogW(PCWSTR::null(), PCWSTR(channel_wide.as_ptr())) {
+                    Ok(h) if !h.0.is_null() => h,
+                    _ => continue,
+                }
+            };
+
+            let mut buffer_size = 65536u32;
+            let mut buffer = vec![0u8; buffer_size as usize];
+            let mut bytes_read = 0u32;
+            let mut min_needed = 0u32;
+
+            loop {
+                match unsafe {
+                    ReadEventLogW(
+                        hlog,
+                        READ_EVENT_LOG_READ_FLAGS(0x0001),
+                        0,
+                        buffer.as_mut_ptr() as *mut _,
+                        buffer_size,
+                        &mut bytes_read,
+                        &mut min_needed,
+                    )
+                } {
+                    Ok(()) => {
+                        if bytes_read == 0 {
+                            break;
+                        }
+                        let mut offset = 0usize;
+                        while offset + std::mem::size_of::<EVENTLOGRECORD>() <= bytes_read as usize {
+                            let record = unsafe {
+                                &*((buffer.as_ptr().add(offset)) as *const EVENTLOGRECORD)
+                            };
+                            if record.Length == 0 {
+                                break;
+                            }
+                            if let Some(entry) = Self::parse_eventlogrecord(record, source.clone()) {
+                                self.collect_entry(entry);
+                                count += 1;
+                            }
+                            offset += record.Length as usize;
+                            if offset >= bytes_read as usize {
+                                break;
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        if min_needed > buffer_size {
+                            buffer_size = min_needed;
+                            buffer.resize(buffer_size as usize, 0);
+                            continue;
+                        }
+                        break;
+                    }
+                }
+            }
+
+            unsafe {
+                let _ = CloseEventLog(hlog);
+            }
+        }
+        count
     }
 }
 
