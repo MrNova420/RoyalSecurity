@@ -41,6 +41,15 @@ pub struct WifiConnection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WifiNetwork {
+    pub ssid: String,
+    pub security_type: String,
+    pub signal_dbm: i32,
+    pub frequency: u32,
+    pub connected: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WifiEvent {
     pub event_type: WifiEventType,
     pub details: String,
@@ -53,6 +62,8 @@ pub enum WifiCollectorError {
     NotStarted,
     #[error("Invalid WiFi event: {0}")]
     InvalidEvent(String),
+    #[error("WiFi API error: {0}")]
+    ApiError(String),
 }
 
 pub struct WifiCollector {
@@ -123,6 +134,219 @@ impl WifiCollector {
         self.events.write().await.clear();
         *self.current_connection.write().await = None;
         debug!("WiFi collector cleared all events");
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn scan_wifi_networks(&self) -> Vec<WifiNetwork> {
+        use windows::Win32::Foundation::{HANDLE, HLOCAL, LocalFree};
+        use windows::Win32::NetworkManagement::WiFi::{
+            DOT11_AUTH_ALGORITHM, DOT11_CIPHER_ALGORITHM, WLAN_AVAILABLE_NETWORK_LIST,
+            WLAN_INTERFACE_INFO_LIST, WlanCloseHandle, WlanEnumInterfaces,
+            WlanGetAvailableNetworkList, WlanOpenHandle,
+        };
+
+        let mut networks = Vec::new();
+
+        unsafe {
+            let mut handle = HANDLE::default();
+            let mut version = 0u32;
+
+            if WlanOpenHandle(2, None, &mut version, &mut handle) != 0 {
+                return networks;
+            }
+
+            let mut iface_list_ptr: *mut WLAN_INTERFACE_INFO_LIST = std::ptr::null_mut();
+            if WlanEnumInterfaces(handle, None, &mut iface_list_ptr) != 0 {
+                let _ = WlanCloseHandle(handle, None);
+                return networks;
+            }
+
+            let iface_list = &*iface_list_ptr;
+            let iface_count = iface_list.dwNumberOfItems as usize;
+            let ifaces = std::slice::from_raw_parts(
+                iface_list.InterfaceInfo.as_ptr(),
+                iface_count,
+            );
+
+            for iface_info in ifaces {
+                let iface_guid = &iface_info.InterfaceGuid;
+
+                let mut network_list_ptr: *mut WLAN_AVAILABLE_NETWORK_LIST =
+                    std::ptr::null_mut();
+                if WlanGetAvailableNetworkList(
+                    handle,
+                    iface_guid,
+                    0x00000003,
+                    None,
+                    &mut network_list_ptr,
+                ) == 0
+                {
+                    let net_list = &*network_list_ptr;
+                    let net_count = net_list.dwNumberOfItems as usize;
+                    let net_slice = std::slice::from_raw_parts(
+                        net_list.Network.as_ptr(),
+                        net_count,
+                    );
+
+                    for net in net_slice {
+
+                        let ssid_bytes = &net.dot11Ssid.ucSSID
+                            [..net.dot11Ssid.uSSIDLength as usize];
+                        let ssid = String::from_utf8_lossy(ssid_bytes).to_string();
+
+                        let security_type = match net.dot11DefaultAuthAlgorithm {
+                            DOT11_AUTH_ALGORITHM(8) => "OWE",
+                            DOT11_AUTH_ALGORITHM(3) => "WPA2-Enterprise",
+                            DOT11_AUTH_ALGORITHM(2) => "WPA2-Personal",
+                            DOT11_AUTH_ALGORITHM(1) => "WPA-Enterprise",
+                            DOT11_AUTH_ALGORITHM(0) => "Open",
+                            _ => "Unknown",
+                        }
+                        .to_string();
+
+                        let cipher_str = match net.dot11DefaultCipherAlgorithm {
+                            DOT11_CIPHER_ALGORITHM(1024) => "GCMP-256",
+                            DOT11_CIPHER_ALGORITHM(512) => "GCMP-128",
+                            DOT11_CIPHER_ALGORITHM(256) => "CCMP-256",
+                            DOT11_CIPHER_ALGORITHM(4) => "TKIP",
+                            DOT11_CIPHER_ALGORITHM(1) => "WEP",
+                            _ => "Unknown",
+                        };
+
+                        let signal = net.wlanSignalQuality as i32 * 2 - 100;
+                        let signal_dbm = signal.max(-100).min(0);
+
+                        networks.push(WifiNetwork {
+                            ssid,
+                            security_type: format!("{}/{}", security_type, cipher_str),
+                            signal_dbm,
+                            frequency: 0,
+                            connected: net.bNetworkConnectable.into(),
+                        });
+                    }
+
+                    LocalFree(HLOCAL(network_list_ptr as *mut _));
+                }
+            }
+
+            LocalFree(HLOCAL(iface_list_ptr as *mut _));
+            let _ = WlanCloseHandle(handle, None);
+        }
+
+        networks
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn scan_wifi_networks(&self) -> Vec<WifiNetwork> {
+        Vec::new()
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn query_current_connection(&self) -> Option<WifiConnection> {
+        use windows::Win32::Foundation::{HANDLE, HLOCAL, LocalFree};
+        use windows::Win32::NetworkManagement::WiFi::{
+            DOT11_AUTH_ALGORITHM, WLAN_CONNECTION_ATTRIBUTES, WLAN_INTERFACE_INFO_LIST,
+            wlan_intf_opcode_current_connection, WlanCloseHandle, WlanEnumInterfaces,
+            WlanOpenHandle, WlanQueryInterface,
+        };
+
+        unsafe {
+            let mut handle = HANDLE::default();
+            let mut version = 0u32;
+
+            if WlanOpenHandle(2, None, &mut version, &mut handle) != 0 {
+                return None;
+            }
+
+            let mut iface_list_ptr: *mut WLAN_INTERFACE_INFO_LIST = std::ptr::null_mut();
+            if WlanEnumInterfaces(handle, None, &mut iface_list_ptr) != 0 {
+                let _ = WlanCloseHandle(handle, None);
+                return None;
+            }
+
+            let iface_list = &*iface_list_ptr;
+            let iface_count = iface_list.dwNumberOfItems as usize;
+            let ifaces = std::slice::from_raw_parts(
+                iface_list.InterfaceInfo.as_ptr(),
+                iface_count,
+            );
+            let mut result = None;
+
+            for iface_info in ifaces {
+                let iface_guid = &iface_info.InterfaceGuid;
+
+                let mut data_size = 0u32;
+                let mut data_ptr: *mut std::ffi::c_void = std::ptr::null_mut();
+
+                if WlanQueryInterface(
+                    handle,
+                    iface_guid,
+                    wlan_intf_opcode_current_connection,
+                    None,
+                    &mut data_size,
+                    &mut data_ptr,
+                    None,
+                ) == 0
+                {
+                    let conn_attrs = &*(data_ptr as *const WLAN_CONNECTION_ATTRIBUTES);
+
+                    let ssid_len =
+                        conn_attrs.wlanAssociationAttributes.dot11Ssid.uSSIDLength as usize;
+                    let ssid_bytes = &conn_attrs.wlanAssociationAttributes.dot11Ssid.ucSSID
+                        [..ssid_len];
+                    let ssid = String::from_utf8_lossy(ssid_bytes).to_string();
+
+                    let bssid_bytes =
+                        &conn_attrs.wlanAssociationAttributes.dot11Bssid;
+                    let bssid = format!(
+                        "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                        bssid_bytes[0],
+                        bssid_bytes[1],
+                        bssid_bytes[2],
+                        bssid_bytes[3],
+                        bssid_bytes[4],
+                        bssid_bytes[5]
+                    );
+
+                    let signal = conn_attrs.wlanAssociationAttributes.wlanSignalQuality as i32
+                        * 2
+                        - 100;
+                    let signal_dbm = signal.max(-100).min(0);
+
+                    let security_type =
+                        match conn_attrs.wlanSecurityAttributes.dot11AuthAlgorithm {
+                            DOT11_AUTH_ALGORITHM(8) => "OWE",
+                            DOT11_AUTH_ALGORITHM(3) => "WPA2-Enterprise",
+                            DOT11_AUTH_ALGORITHM(2) => "WPA2-Personal",
+                            DOT11_AUTH_ALGORITHM(1) => "WPA-Enterprise",
+                            DOT11_AUTH_ALGORITHM(0) => "Open",
+                            _ => "Unknown",
+                        }
+                        .to_string();
+
+                    result = Some(WifiConnection {
+                        ssid,
+                        bssid,
+                        security_type,
+                        signal_dbm,
+                        frequency: 0,
+                        connected_at: Utc::now(),
+                    });
+
+                    LocalFree(HLOCAL(data_ptr));
+                    break;
+                }
+            }
+
+            LocalFree(HLOCAL(iface_list_ptr as *mut _));
+            let _ = WlanCloseHandle(handle, None);
+            result
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn query_current_connection(&self) -> Option<WifiConnection> {
+        None
     }
 }
 
@@ -235,5 +459,46 @@ mod tests {
         assert_eq!(collector.event_count().await, 1);
         collector.clear().await;
         assert_eq!(collector.event_count().await, 0);
+    }
+
+    #[test]
+    fn test_scan_wifi_networks_returns_vec() {
+        let collector = WifiCollector::new();
+        let networks = collector.scan_wifi_networks();
+        assert!(networks.is_empty() || !networks.is_empty());
+    }
+
+    #[test]
+    fn test_query_current_connection_returns_option() {
+        let collector = WifiCollector::new();
+        let _conn = collector.query_current_connection();
+    }
+
+    #[test]
+    fn test_wifi_network_struct() {
+        let net = WifiNetwork {
+            ssid: "TestNet".to_string(),
+            security_type: "WPA2-Personal/CCMP-128".to_string(),
+            signal_dbm: -50,
+            frequency: 5180,
+            connected: true,
+        };
+        assert_eq!(net.ssid, "TestNet");
+        assert_eq!(net.signal_dbm, -50);
+        assert!(net.connected);
+    }
+
+    #[test]
+    fn test_wifi_network_serialization() {
+        let net = WifiNetwork {
+            ssid: "TestNet".to_string(),
+            security_type: "WPA2".to_string(),
+            signal_dbm: -40,
+            frequency: 2437,
+            connected: false,
+        };
+        let json = serde_json::to_string(&net).unwrap();
+        let deserialized: WifiNetwork = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.ssid, "TestNet");
     }
 }

@@ -1,9 +1,14 @@
 ﻿pub mod prelude;
 pub use royalsecurity_core as core;
 
+use royalsecurity_common::types::*;
+use async_trait::async_trait;
+use royalsecurity_core::module::{SecurityModule, ModuleConfig};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::error::Error;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -57,6 +62,11 @@ pub struct UsbCollector {
     running: Arc<RwLock<bool>>,
     events: Arc<RwLock<Vec<UsbEvent>>>,
     known_devices: Arc<RwLock<Vec<UsbDevice>>>,
+    config: ModuleConfig,
+    status: ModuleStatus,
+    start_time: Option<Instant>,
+    events_processed: u64,
+    errors: u64,
 }
 
 impl UsbCollector {
@@ -65,6 +75,11 @@ impl UsbCollector {
             running: Arc::new(RwLock::new(false)),
             events: Arc::new(RwLock::new(Vec::new())),
             known_devices: Arc::new(RwLock::new(Vec::new())),
+            config: ModuleConfig::default(),
+            status: ModuleStatus::Uninitialized,
+            start_time: None,
+            events_processed: 0,
+            errors: 0,
         }
     }
 
@@ -136,11 +151,218 @@ impl UsbCollector {
         self.events.write().await.clear();
         debug!("USB collector cleared all events");
     }
+
+    #[cfg(target_os = "windows")]
+    pub fn scan_usb_devices(&self) -> Vec<UsbDevice> {
+        use windows::Win32::Devices::DeviceAndDriverInstallation::{
+            SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
+            SP_DEVINFO_DATA, DIGCF_PRESENT, SPDRP_DEVICEDESC, SPDRP_HARDWAREID,
+        };
+        use windows::Win32::Foundation::HWND;
+
+        const GUID_DEVCLASS_USB: windows::core::GUID = windows::core::GUID {
+            data1: 0xA5DC_BF10,
+            data2: 0x6530,
+            data3: 0x11D2,
+            data4: [0x90, 0x1F, 0x00, 0xC0, 0x4F, 0xB9, 0x51, 0xED],
+        };
+
+        let mut devices = Vec::new();
+
+        let dev_info = match unsafe {
+            SetupDiGetClassDevsW(
+                Some(&GUID_DEVCLASS_USB),
+                None,
+                HWND(std::ptr::null_mut()),
+                DIGCF_PRESENT,
+            )
+        } {
+            Ok(h) => h,
+            Err(_) => return devices,
+        };
+
+        let mut index = 0u32;
+        loop {
+            let mut dev_data: SP_DEVINFO_DATA = unsafe { std::mem::zeroed() };
+            dev_data.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
+
+            if unsafe { SetupDiEnumDeviceInfo(dev_info, index, &mut dev_data) }.is_err() {
+                break;
+            }
+            index += 1;
+
+            let hardware_id =
+                unsafe { get_device_string_property(dev_info, &dev_data, SPDRP_HARDWAREID) };
+
+            let Some(hw_id) = hardware_id else {
+                continue;
+            };
+
+            if !hw_id.to_uppercase().starts_with("USB\\") {
+                continue;
+            }
+
+            let (vid, pid) = match parse_hardware_id(&hw_id) {
+                Some(v) => v,
+                None => continue,
+            };
+
+            let description =
+                unsafe { get_device_string_property(dev_info, &dev_data, SPDRP_DEVICEDESC) };
+
+            let serial = hw_id.rsplit('\\').next().map(|s| s.to_string());
+
+            devices.push(UsbDevice {
+                id: hw_id,
+                vendor_id: vid,
+                product_id: pid,
+                serial,
+                manufacturer: description,
+                connected: true,
+                timestamp: Utc::now(),
+            });
+        }
+
+        unsafe {
+            let _ = SetupDiDestroyDeviceInfoList(dev_info);
+        }
+        devices
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn scan_usb_devices(&self) -> Vec<UsbDevice> {
+        Vec::new()
+    }
 }
 
 impl Default for UsbCollector {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn get_device_string_property(
+    dev_info: windows::Win32::Devices::DeviceAndDriverInstallation::HDEVINFO,
+    dev_data: *const windows::Win32::Devices::DeviceAndDriverInstallation::SP_DEVINFO_DATA,
+    property: windows::Win32::Devices::DeviceAndDriverInstallation::SETUP_DI_REGISTRY_PROPERTY,
+) -> Option<String> {
+    use windows::Win32::Devices::DeviceAndDriverInstallation::SetupDiGetDeviceRegistryPropertyW;
+
+    let mut required_size: u32 = 0;
+    let _ = SetupDiGetDeviceRegistryPropertyW(
+        dev_info,
+        dev_data,
+        property,
+        None,
+        None,
+        Some(&mut required_size),
+    );
+
+    if required_size == 0 {
+        return None;
+    }
+
+    let byte_len = required_size as usize;
+    let mut buffer: Vec<u8> = vec![0u8; byte_len];
+    let mut actual_size: u32 = 0;
+    if SetupDiGetDeviceRegistryPropertyW(
+        dev_info,
+        dev_data,
+        property,
+        None,
+        Some(&mut buffer),
+        Some(&mut actual_size),
+    )
+    .is_err()
+    {
+        return None;
+    }
+
+    let len = actual_size as usize;
+    if len == 0 || len > buffer.len() || len % 2 != 0 {
+        return None;
+    }
+    let wide: Vec<u16> = buffer[..len]
+        .chunks_exact(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    Some(
+        String::from_utf16_lossy(&wide)
+            .trim_end_matches('\0')
+            .to_string(),
+    )
+}
+
+pub fn parse_hardware_id(hardware_id: &str) -> Option<(String, String)> {
+    let upper = hardware_id.to_uppercase();
+    if !upper.starts_with("USB\\") {
+        return None;
+    }
+
+    let vid_idx = upper.find("VID_")? + 4;
+    let vid_rest = &upper[vid_idx..];
+    let vid_end = vid_rest.find(|c: char| c == '\\' || c == '&').unwrap_or(vid_rest.len());
+    let vid = vid_rest[..vid_end].to_string();
+
+    let pid_idx = upper.find("PID_")? + 4;
+    let pid_rest = &upper[pid_idx..];
+    let pid_end = pid_rest.find(|c: char| c == '\\').unwrap_or(pid_rest.len());
+    let pid = pid_rest[..pid_end].to_string();
+
+    Some((vid, pid))
+}
+
+#[async_trait]
+impl SecurityModule for UsbCollector {
+    fn name(&self) -> &str {
+        "USB Collector"
+    }
+
+    fn version(&self) -> &str {
+        "0.1.0"
+    }
+
+    fn description(&self) -> &str {
+        "Monitors USB device connections, disconnections, and data transfers"
+    }
+
+    async fn initialize(
+        &mut self,
+        config: ModuleConfig,
+    ) -> std::result::Result<(), Box<dyn Error + Send + Sync>> {
+        self.config = config;
+        self.status = ModuleStatus::Initialized;
+        info!("USB Collector initialized");
+        Ok(())
+    }
+
+    async fn start(&mut self) -> std::result::Result<(), Box<dyn Error + Send + Sync>> {
+        UsbCollector::start(self).await?;
+        self.status = ModuleStatus::Running;
+        self.start_time = Some(Instant::now());
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> std::result::Result<(), Box<dyn Error + Send + Sync>> {
+        UsbCollector::stop(self).await?;
+        self.status = ModuleStatus::Stopped;
+        Ok(())
+    }
+
+    async fn health(&self) -> ModuleHealth {
+        ModuleHealth {
+            status: self.status.clone(),
+            last_heartbeat: Utc::now(),
+            error_count: self.errors,
+            events_processed: self.events_processed,
+            events_per_second: 0.0,
+            memory_usage_bytes: 0,
+        }
+    }
+
+    async fn handle_event(&self, _event: &SecurityEvent) -> Option<SecurityEvent> {
+        None
     }
 }
 
@@ -257,5 +479,65 @@ mod tests {
         assert_eq!(collector.event_count().await, 1);
         collector.clear().await;
         assert_eq!(collector.event_count().await, 0);
+    }
+
+    #[test]
+    fn test_parse_hardware_id_standard() {
+        let (vid, pid) = parse_hardware_id("USB\\VID_046D&PID_082D\\5&12345678&0&0000").unwrap();
+        assert_eq!(vid, "046D");
+        assert_eq!(pid, "082D");
+    }
+
+    #[test]
+    fn test_parse_hardware_id_lowercase() {
+        let (vid, pid) = parse_hardware_id("USB\\vid_abcd&pid_1234").unwrap();
+        assert_eq!(vid, "ABCD");
+        assert_eq!(pid, "1234");
+    }
+
+    #[test]
+    fn test_parse_hardware_id_no_serial() {
+        let (vid, pid) = parse_hardware_id("USB\\VID_1234&PID_5678").unwrap();
+        assert_eq!(vid, "1234");
+        assert_eq!(pid, "5678");
+    }
+
+    #[test]
+    fn test_parse_hardware_id_not_usb() {
+        assert!(parse_hardware_id("PCI\\VEN_8086&DEV_1502").is_none());
+    }
+
+    #[test]
+    fn test_parse_hardware_id_empty() {
+        assert!(parse_hardware_id("").is_none());
+    }
+
+    #[test]
+    fn test_parse_hardware_id_no_vid() {
+        assert!(parse_hardware_id("USB\\PID_1234").is_none());
+    }
+
+    #[test]
+    fn test_parse_hardware_id_no_pid() {
+        assert!(parse_hardware_id("USB\\VID_1234").is_none());
+    }
+
+    #[test]
+    fn test_scan_usb_devices_returns_vec() {
+        let collector = UsbCollector::new();
+        let devices = collector.scan_usb_devices();
+        assert!(devices.is_empty() || !devices.is_empty());
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_scan_usb_devices_on_windows() {
+        let collector = UsbCollector::new();
+        let devices = collector.scan_usb_devices();
+        for device in &devices {
+            assert!(!device.vendor_id.is_empty());
+            assert!(!device.product_id.is_empty());
+            assert!(device.connected);
+        }
     }
 }

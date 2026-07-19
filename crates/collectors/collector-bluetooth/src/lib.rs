@@ -218,6 +218,159 @@ impl BluetoothCollector {
     pub fn remove_device(&mut self, device_id: &str) -> bool {
         self.devices.remove(device_id).is_some()
     }
+
+    #[cfg(target_os = "windows")]
+    pub fn scan_bluetooth_devices(&mut self) -> Vec<BluetoothDevice> {
+        use windows::Win32::Devices::DeviceAndDriverInstallation::{
+            SetupDiGetClassDevsW, SetupDiEnumDeviceInfo, SetupDiGetDeviceRegistryPropertyW,
+            SetupDiGetDeviceInstanceIdW, SetupDiDestroyDeviceInfoList,
+            SP_DEVINFO_DATA, DIGCF_PRESENT, SPDRP_DEVICEDESC, SPDRP_HARDWAREID,
+            GUID_DEVCLASS_BLUETOOTH,
+        };
+
+        let mut scanned = Vec::new();
+
+        unsafe {
+            let dev_info_set = match SetupDiGetClassDevsW(
+                Some(&GUID_DEVCLASS_BLUETOOTH),
+                windows::core::PCWSTR::null(),
+                None,
+                DIGCF_PRESENT,
+            ) {
+                Ok(set) => set,
+                Err(e) => {
+                    tracing::warn!("SetupDiGetClassDevsW failed: {}", e);
+                    return scanned;
+                }
+            };
+
+            let mut index = 0u32;
+            loop {
+                let mut dev_info_data: SP_DEVINFO_DATA = std::mem::zeroed();
+                dev_info_data.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
+
+                if SetupDiEnumDeviceInfo(dev_info_set, index, &mut dev_info_data).is_err() {
+                    break;
+                }
+                index += 1;
+
+                let mut desc_buf = [0u8; 512];
+                let name = if SetupDiGetDeviceRegistryPropertyW(
+                    dev_info_set,
+                    &dev_info_data,
+                    SPDRP_DEVICEDESC,
+                    None,
+                    Some(&mut desc_buf),
+                    None,
+                )
+                .is_ok()
+                {
+                    let wide = std::slice::from_raw_parts(
+                        desc_buf.as_ptr() as *const u16,
+                        desc_buf.len() / 2,
+                    );
+                    let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
+                    String::from_utf16_lossy(&wide[..len])
+                } else {
+                    "Unknown Bluetooth Device".to_string()
+                };
+
+                let mut hwid_buf = [0u8; 1024];
+                let _hwid = if SetupDiGetDeviceRegistryPropertyW(
+                    dev_info_set,
+                    &dev_info_data,
+                    SPDRP_HARDWAREID,
+                    None,
+                    Some(&mut hwid_buf),
+                    None,
+                )
+                .is_ok()
+                {
+                    let wide = std::slice::from_raw_parts(
+                        hwid_buf.as_ptr() as *const u16,
+                        hwid_buf.len() / 2,
+                    );
+                    let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
+                    String::from_utf16_lossy(&wide[..len])
+                } else {
+                    "Unknown".to_string()
+                };
+
+                let mut instance_id_buf = [0u16; 512];
+                let mac_address = if SetupDiGetDeviceInstanceIdW(
+                    dev_info_set,
+                    &dev_info_data,
+                    Some(&mut instance_id_buf),
+                    None,
+                )
+                .is_ok()
+                {
+                    let len = instance_id_buf.iter().position(|&c| c == 0).unwrap_or(instance_id_buf.len());
+                    let instance_id = String::from_utf16_lossy(&instance_id_buf[..len]);
+                    parse_bt_address_from_instance_id(&instance_id)
+                } else {
+                    "Unknown".to_string()
+                };
+
+                let id = format!("bt_{}", index);
+                let event = BluetoothEvent {
+                    device_id: id.clone(),
+                    event_type: BluetoothEventType::DeviceDiscovered,
+                    timestamp: Utc::now(),
+                };
+
+                let device = BluetoothDevice {
+                    id: id.clone(),
+                    name,
+                    mac_address: mac_address.clone(),
+                    device_class: 0,
+                    paired: false,
+                    last_seen: Utc::now(),
+                };
+
+                if !self.known_devices.contains(&mac_address) {
+                    self.known_devices.push(mac_address);
+                }
+                self.devices.insert(id, device.clone());
+                self.events.push(event);
+                scanned.push(device);
+            }
+
+            let _ = SetupDiDestroyDeviceInfoList(dev_info_set);
+        }
+
+        info!("Scanned {} Bluetooth devices", scanned.len());
+        scanned
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn scan_bluetooth_devices(&mut self) -> Vec<BluetoothDevice> {
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn parse_bt_address_from_instance_id(instance_id: &str) -> String {
+    if let Some(pos) = instance_id.find("Dev_") {
+        let addr_hex = &instance_id[pos + 4..];
+        let addr_hex = addr_hex.split('\\').next().unwrap_or(addr_hex);
+        if addr_hex.len() == 12 && addr_hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            let mut mac = String::new();
+            for i in (0..12).step_by(2) {
+                if !mac.is_empty() {
+                    mac.push(':');
+                }
+                mac.push_str(&addr_hex[i..i + 2]);
+            }
+            return mac;
+        }
+    }
+    instance_id.to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parse_bt_address_from_instance_id(instance_id: &str) -> String {
+    instance_id.to_string()
 }
 
 #[async_trait]
@@ -375,5 +528,25 @@ mod tests {
         assert_eq!(collector.device_count(), 3);
         assert!(collector.is_known("AA:BB:CC:DD:EE:01"));
         assert!(collector.is_known("AA:BB:CC:DD:EE:03"));
+    }
+
+    #[test]
+    fn test_parse_bt_address_from_instance_id() {
+        let addr = parse_bt_address_from_instance_id(
+            "BTHENUM\\Dev_AABBCCDDEEFF\\8&12345678&0&001122334455",
+        );
+        assert_eq!(addr, "AA:BB:CC:DD:EE:FF");
+    }
+
+    #[test]
+    fn test_parse_bt_address_short_id() {
+        let addr = parse_bt_address_from_instance_id("some_other_id");
+        assert_eq!(addr, "some_other_id");
+    }
+
+    #[test]
+    fn test_scan_bluetooth_devices_returns_vec() {
+        let mut collector = BluetoothCollector::new(test_bus());
+        let _devices = collector.scan_bluetooth_devices();
     }
 }
