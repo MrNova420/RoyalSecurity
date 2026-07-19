@@ -31,6 +31,16 @@ impl RuleEngine {
         self.sigma_rules.push(rule);
     }
 
+    pub fn remove_sigma_rule(&mut self, rule_id: &str) -> bool {
+        let before = self.sigma_rules.len();
+        self.sigma_rules.retain(|r| r.id != rule_id);
+        let removed = self.sigma_rules.len() < before;
+        if removed {
+            info!(rule_id = %rule_id, "Removed Sigma rule");
+        }
+        removed
+    }
+
     pub fn add_dsl_rule(&mut self, rule: DslRule) {
         info!(name = %rule.name, "Added DSL rule");
         self.dsl_rules.push(rule);

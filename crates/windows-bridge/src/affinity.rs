@@ -1,7 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::LazyLock;
 
-static CORE_PIN_COUNTS: once_cell::sync::Lazy<Vec<AtomicUsize>> =
-    once_cell::sync::Lazy::new(|| {
+static CORE_PIN_COUNTS: LazyLock<Vec<AtomicUsize>> =
+    LazyLock::new(|| {
         let n = get_core_count();
         (0..n).map(|_| AtomicUsize::new(0)).collect()
     });

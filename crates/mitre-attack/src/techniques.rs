@@ -1,5 +1,5 @@
 ﻿use serde::{Serialize, Deserialize};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +34,7 @@ fn t(
     }
 }
 
-static TECHNIQUE_DB: Lazy<Vec<Technique>> = Lazy::new(|| vec![
+static TECHNIQUE_DB: LazyLock<Vec<Technique>> = LazyLock::new(|| vec![
     // =========================================================================
     // TA0043 Reconnaissance
     // =========================================================================

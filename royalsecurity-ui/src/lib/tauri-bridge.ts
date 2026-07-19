@@ -221,16 +221,16 @@ export async function verifyAuditChain() {
 
 // ── WRITE commands ──
 
-export async function updateConfig(config: Partial<Config>) {
-  return invokeCommand<void>('update_config', { config });
+export async function updateConfig(new_config: Partial<Config>) {
+  return invokeCommand<void>('update_config', { new_config });
 }
 
-export async function addSigmaRule(yaml: string) {
-  return invokeCommand<{ success: boolean; rule_id?: string; message: string }>('add_sigma_rule', { yaml });
+export async function addSigmaRule(yaml_content: string) {
+  return invokeCommand<{ success: boolean; rule_id?: string; message: string }>('add_sigma_rule', { yaml_content });
 }
 
 export async function addYaraRule(yaml: string) {
-  return invokeCommand<{ success: boolean; rule_id?: string; message: string }>('add_yara_rule', { yaml });
+  return invokeCommand<{ success: boolean; rule_id?: string; message: string }>('add_yara_rule', { yaml_content: yaml });
 }
 
 export async function evaluateEvent(event: string) {
@@ -253,12 +253,12 @@ export async function getDetectionRules() {
   return invokeCommand<{ sigma_rules: number; dsl_rules: number; yara_rules: number; total: number }>('get_detection_rules');
 }
 
-export async function removeDetectionRule(ruleId: string) {
-  return invokeCommand<{ success: boolean; message: string }>('remove_detection_rule', { ruleId });
+export async function removeDetectionRule(rule_id: string) {
+  return invokeCommand<{ success: boolean; message: string }>('remove_detection_rule', { rule_id });
 }
 
-export async function triggerScan(scanType: string) {
-  return invokeCommand<{ success: boolean; message: string }>('trigger_scan', { scanType });
+export async function triggerScan(scan_type: string) {
+  return invokeCommand<{ success: boolean; message: string }>('trigger_scan', { scan_type });
 }
 
 export async function updateConfigField(key: string, value: unknown) {
@@ -269,12 +269,12 @@ export async function exportAuditLog(format: string) {
   return invokeCommand<{ success: boolean; path?: string; message: string }>('export_audit_log', { format });
 }
 
-export async function encryptData(data: string, keyId: string) {
-  return invokeCommand<{ encrypted: string }>('encrypt_data', { data, keyId });
+export async function encryptData(data: string, key_id: string) {
+  return invokeCommand<{ encrypted: string }>('encrypt_data', { data, key_id });
 }
 
-export async function decryptData(data: string, keyId: string) {
-  return invokeCommand<{ decrypted: string }>('decrypt_data', { data, keyId });
+export async function decryptData(data: string, key_id: string) {
+  return invokeCommand<{ decrypted: string }>('decrypt_data', { data, key_id });
 }
 
 // --- NEW: Forensic Triage ---
@@ -286,8 +286,8 @@ export async function runForensicTriage() {
 export async function scanVulnerabilities() {
   return invokeCommand<unknown>('scan_vulnerabilities');
 }
-export async function getCveDetails(cveId: string) {
-  return invokeCommand<unknown>('get_cve_details', { cveId });
+export async function getCveDetails(cve_id: string) {
+  return invokeCommand<unknown>('get_cve_details', { cve_id });
 }
 export async function searchCves(query: string) {
   return invokeCommand<unknown>('search_cves', { query });

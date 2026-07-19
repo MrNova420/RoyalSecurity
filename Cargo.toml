@@ -203,7 +203,6 @@ regex = "1"
 # Network
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 socket2 = "0.5"
-trust-dns-resolver = "0.23"
 
 # Hashing
 blake3 = "1"

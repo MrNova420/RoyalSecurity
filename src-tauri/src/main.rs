@@ -296,12 +296,20 @@ async fn get_events(
     state: State<'_, AppState>,
     limit: Option<usize>,
 ) -> Result<serde_json::Value, String> {
-    let count = state.store.event_count().map_err(|e| e.to_string())?;
     let max = limit.unwrap_or(100);
+    let events = state
+        .store
+        .get_recent_events(max)
+        .map_err(|e| e.to_string())?;
+    let values: Vec<serde_json::Value> = events
+        .into_iter()
+        .map(|e| serde_json::to_value(e).unwrap_or_default())
+        .collect();
+    let total = state.store.event_count().map_err(|e| e.to_string())?;
     Ok(serde_json::json!({
-        "total_events": count,
+        "total_events": total,
         "limit": max,
-        "message": format!("{} events stored, returning up to {}", count, max),
+        "events": values,
     }))
 }
 
@@ -401,6 +409,39 @@ async fn get_tpm_status(state: State<'_, AppState>) -> Result<serde_json::Value,
 }
 
 // ---------------------------------------------------------------------------
+// YAML-to-JSON helper for add_yara_rule
+// ---------------------------------------------------------------------------
+
+fn yaml_to_json(yaml: &yaml_rust2::Yaml) -> serde_json::Value {
+    match yaml {
+        yaml_rust2::Yaml::Null | yaml_rust2::Yaml::BadValue => serde_json::Value::Null,
+        yaml_rust2::Yaml::Integer(i) => serde_json::json!(i),
+        yaml_rust2::Yaml::Real(r) => {
+            r.parse::<f64>().map(|v| serde_json::json!(v)).unwrap_or(serde_json::Value::Null)
+        }
+        yaml_rust2::Yaml::String(s) => serde_json::json!(s),
+        yaml_rust2::Yaml::Boolean(b) => serde_json::json!(b),
+        yaml_rust2::Yaml::Array(arr) => {
+            serde_json::json!(arr.iter().map(|v| yaml_to_json(v)).collect::<Vec<_>>())
+        }
+        yaml_rust2::Yaml::Hash(map) => {
+            let obj: serde_json::Map<String, serde_json::Value> = map
+                .iter()
+                .filter_map(|(k, v)| {
+                    if let yaml_rust2::Yaml::String(key) = k {
+                        Some((key.clone(), yaml_to_json(v)))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            serde_json::Value::Object(obj)
+        }
+        _ => serde_json::Value::Null,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // WRITE commands (16)
 // ---------------------------------------------------------------------------
 
@@ -469,9 +510,16 @@ async fn add_sigma_rule(
 #[tauri::command]
 async fn add_yara_rule(
     state: State<'_, AppState>,
-    rule_json: serde_json::Value,
+    yaml_content: String,
 ) -> Result<String, String> {
-    let rule: YaraRule = serde_json::from_value(rule_json).map_err(|e| e.to_string())?;
+    let docs = yaml_rust2::YamlLoader::load_from_str(&yaml_content)
+        .map_err(|e| format!("YAML parse error: {}", e))?;
+    let doc = docs.into_iter().next()
+        .ok_or_else(|| "Empty YAML document".to_string())?;
+    let json_str = serde_json::to_string(&yaml_to_json(&doc))
+        .map_err(|e| format!("YAML→JSON conversion error: {}", e))?;
+    let rule: YaraRule = serde_json::from_str(&json_str)
+        .map_err(|e| format!("YaraRule deserialization error: {}", e))?;
     let id = rule.id.clone();
     let mut engine = state.yara_engine.write().await;
     engine.add_rule(rule);
@@ -571,18 +619,18 @@ async fn block_ip(
     #[cfg(windows)]
     {
         use std::process::Command;
+        let rule_name = format!("block_ip_{}", ip.replace('.', "_"));
+        let remote_arg = format!("remoteip={}", ip);
         let _ = Command::new("netsh")
             .args([
                 "advfirewall",
                 "firewall",
                 "add",
                 "rule",
-                "name=block_ip_",
-                &ip.replace('.', "_"),
+                &format!("name={}", rule_name),
                 "dir=in",
                 "action=block",
-                "remoteip=",
-                &ip,
+                &remote_arg,
                 "enable=yes",
             ])
             .output()
@@ -607,16 +655,7 @@ async fn remove_detection_rule(
 ) -> Result<serde_json::Value, String> {
     let sigma_removed = {
         let mut engine = state.rule_engine.write().await;
-        let before = engine.sigma_rule_count();
-        engine.add_sigma_rule(royalsecurity_rule_engine::sigma::CompiledSigmaRule {
-            id: rule_id.clone(),
-            title: "removed".into(),
-            level: "low".into(),
-            tags: vec![],
-            condition: "false".into(),
-            patterns: vec![],
-        });
-        engine.sigma_rule_count() != before
+        engine.remove_sigma_rule(&rule_id)
     };
     let yara_removed = {
         let mut yara = state.yara_engine.write().await;
@@ -1322,9 +1361,7 @@ fn main() {
             ioc_matcher: Arc::new(RwLock::new(ioc_matcher)),
             yara_engine: Arc::new(RwLock::new(yara_engine)),
             rule_updater: Arc::new(RwLock::new(rule_updater)),
-            ppl: Arc::new(RwLock::new(ProcessProtection::new(
-                ProtectionConfig::default(),
-            ))),
+            ppl: Arc::new(RwLock::new(ppl)),
             tpm: Arc::new(RwLock::new(TpmManager::new())),
             tpm_vault: Arc::new(RwLock::new(tpm_vault)),
             intel_aggregator: Arc::new(RwLock::new(ThreatIntelAggregator::default())),
