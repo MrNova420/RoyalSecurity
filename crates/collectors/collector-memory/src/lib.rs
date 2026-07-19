@@ -1,4 +1,4 @@
-pub mod prelude;
+﻿pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -7,8 +7,9 @@ use royalsecurity_core::module::{SecurityModule, ModuleConfig};
 use royalsecurity_core::bus::EventBus;
 use std::error::Error;
 use std::time::Instant;
-use tracing::info;
+use tracing::{info, warn};
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MemoryCollectorError {
@@ -25,11 +26,14 @@ pub struct MemoryAllocEvent {
     pub size: u64,
     pub protection: String,
     pub allocation_type: String,
+    pub region_type: String,
+    pub suspicious: bool,
+    pub suspicion_reason: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
 pub struct MemoryCollector {
-    _bus: EventBus,
+    bus: Arc<EventBus>,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -39,10 +43,13 @@ pub struct MemoryCollector {
     max_allocations: usize,
 }
 
+unsafe impl Send for MemoryCollector {}
+unsafe impl Sync for MemoryCollector {}
+
 impl MemoryCollector {
     pub fn new(bus: EventBus) -> Self {
         Self {
-            _bus: bus,
+            bus: Arc::new(bus),
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,
@@ -77,6 +84,109 @@ impl MemoryCollector {
             self.allocations.len()
         );
         Ok(())
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn scan_process_memory(&mut self, pid: u32) -> Vec<MemoryAllocEvent> {
+        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
+        use windows::Win32::System::Memory::{VirtualQueryEx, MEMORY_BASIC_INFORMATION, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_EXECUTE_WRITECOPY, PAGE_READWRITE, PAGE_WRITECOPY};
+        use windows::Win32::Foundation::CloseHandle;
+        use std::ffi::c_void;
+
+        let mut results = Vec::new();
+
+        unsafe {
+            let process_handle = match OpenProcess(
+                PROCESS_QUERY_INFORMATION | PROCESS_VM_READ,
+                false,
+                pid,
+            ) {
+                Ok(handle) => handle,
+                Err(e) => {
+                    warn!("Failed to open process {} for memory scan: {}", pid, e);
+                    return results;
+                }
+            };
+
+            let mut address = 0usize;
+            let mut mbi: MEMORY_BASIC_INFORMATION = std::mem::zeroed();
+
+            while VirtualQueryEx(
+                process_handle,
+                Some(address as *const c_void),
+                &mut mbi,
+                std::mem::size_of::<MEMORY_BASIC_INFORMATION>(),
+            ) > 0
+            {
+                let region_size = mbi.RegionSize;
+                let base = mbi.BaseAddress as u64;
+                let protect = mbi.Protect;
+                let state = mbi.State;
+
+                let protection_str = match protect {
+                    p if p == PAGE_READWRITE => "ReadWrite".into(),
+                    p if p == PAGE_EXECUTE_READWRITE => "ExecuteReadWrite".into(),
+                    p if p == PAGE_EXECUTE_READ => "ExecuteRead".into(),
+                    p if p == PAGE_EXECUTE => "Execute".into(),
+                    p if p == PAGE_EXECUTE_WRITECOPY => "ExecuteWriteCopy".into(),
+                    p if p == PAGE_WRITECOPY => "WriteCopy".into(),
+                    _ => format!("0x{:X}", protect.0),
+                };
+
+                let state_str = if state == MEM_COMMIT {
+                    "Commit"
+                } else if state == MEM_RESERVE {
+                    "Reserve"
+                } else {
+                    "Free"
+                };
+
+                let mut suspicious = false;
+                let mut suspicion_reason = None;
+
+                if protect == PAGE_EXECUTE_READWRITE {
+                    suspicious = true;
+                    suspicion_reason = Some("RWX memory region (common in process injection)".into());
+                }
+
+                if state == MEM_COMMIT && region_size > 100 * 1024 * 1024 {
+                    suspicious = true;
+                    suspicion_reason = Some(format!("Oversized committed region: {} bytes", region_size));
+                }
+
+                let event = MemoryAllocEvent {
+                    process_id: pid,
+                    base_address: base,
+                    size: region_size as u64,
+                    protection: protection_str,
+                    allocation_type: state_str.into(),
+                    region_type: "Unknown".into(),
+                    suspicious,
+                    suspicion_reason,
+                    timestamp: Utc::now(),
+                };
+
+                results.push(event);
+
+                let base_addr = mbi.BaseAddress as usize;
+                if let Some(next) = base_addr.checked_add(region_size) {
+                    address = next;
+                } else {
+                    break;
+                }
+            }
+
+            let _ = CloseHandle(process_handle);
+        }
+
+        self.events_processed += results.len() as u64;
+        self.allocations.extend(results.clone());
+        results
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn scan_process_memory(&mut self, _pid: u32) -> Vec<MemoryAllocEvent> {
+        Vec::new()
     }
 
     pub fn capture_allocation(&mut self, event: MemoryAllocEvent) {
@@ -127,6 +237,10 @@ impl MemoryCollector {
         self.max_allocations = max;
     }
 
+    pub fn get_suspicious_allocations(&self) -> Vec<&MemoryAllocEvent> {
+        self.allocations.iter().filter(|a| a.suspicious).collect()
+    }
+
     pub fn get_allocations_with_high_protection(&self) -> Vec<&MemoryAllocEvent> {
         self.allocations
             .iter()
@@ -144,10 +258,10 @@ impl SecurityModule for MemoryCollector {
         "Memory Collector"
     }
     fn version(&self) -> &str {
-        "0.1.0"
+        "0.2.0"
     }
     fn description(&self) -> &str {
-        "Monitors memory allocation patterns and suspicious memory operations"
+        "Real memory region scanning using VirtualQueryEx for injection detection"
     }
 
     async fn initialize(
@@ -201,6 +315,9 @@ mod tests {
             size,
             protection: protection.into(),
             allocation_type: alloc_type.into(),
+            region_type: "Unknown".into(),
+            suspicious: false,
+            suspicion_reason: None,
             timestamp: Utc::now(),
         }
     }
@@ -280,6 +397,19 @@ mod tests {
     }
 
     #[test]
+    fn test_suspicious_detection() {
+        let mut collector = MemoryCollector::new(test_bus());
+        let mut suspicious = test_alloc(100, 4096, "ReadWriteExecute", "Commit");
+        suspicious.suspicious = true;
+        suspicious.suspicion_reason = Some("RWX region".into());
+        collector.capture_allocation(suspicious);
+        collector.capture_allocation(test_alloc(100, 4096, "ReadWrite", "Commit"));
+
+        let sus = collector.get_suspicious_allocations();
+        assert_eq!(sus.len(), 1);
+    }
+
+    #[test]
     fn test_high_protection_allocations() {
         let mut collector = MemoryCollector::new(test_bus());
         collector.capture_allocation(test_alloc(100, 4096, "ReadWriteExecute", "Commit"));
@@ -287,5 +417,13 @@ mod tests {
         collector.capture_allocation(test_alloc(100, 4096, "ReadOnly", "Commit"));
         let high = collector.get_allocations_with_high_protection();
         assert_eq!(high.len(), 2);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_scan_process_memory() {
+        let mut collector = MemoryCollector::new(test_bus());
+        let results = collector.scan_process_memory(std::process::id());
+        assert!(!results.is_empty());
     }
 }

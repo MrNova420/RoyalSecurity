@@ -6,6 +6,7 @@ pub mod audit;
 pub mod hotreload;
 pub mod module;
 pub mod ppl;
+pub mod processtree;
 pub mod registry;
 pub mod tpm;
 pub mod engine;

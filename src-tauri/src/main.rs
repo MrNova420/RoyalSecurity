@@ -1338,17 +1338,18 @@ fn main() {
     }
 
     {
+        let collector_bus = bus.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             tracing::info!("Starting real-time collectors");
 
             let sysmon = royalsecurity_collector_sysmon::SysmonCollector::new(
-                royalsecurity_core::bus::EventBus::new(),
+                collector_bus.clone(),
             );
             let _ = sysmon.start().await;
 
             let mut log_collector = royalsecurity_collector_log::LogCollector::new(
-                royalsecurity_core::bus::EventBus::new(),
+                collector_bus,
             );
             let _ = log_collector.start();
 

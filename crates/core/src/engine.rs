@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use crate::audit::AuditLog;
 use crate::bus::{EventBus, TryRecvError};
 use crate::config::AppConfig;
+use crate::processtree::ProcessTreeTracker;
 use royalsecurity_common::types::*;
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -53,6 +54,7 @@ pub struct SecurityEngine {
     pub audit: Arc<RwLock<AuditLog>>,
     pub event_count: Arc<AtomicUsize>,
     pub start_time: Arc<RwLock<Option<chrono::DateTime<Utc>>>>,
+    pub process_tree: Arc<ProcessTreeTracker>,
 }
 
 impl SecurityEngine {
@@ -64,6 +66,7 @@ impl SecurityEngine {
             audit: Arc::new(RwLock::new(AuditLog::new())),
             event_count: Arc::new(AtomicUsize::new(0)),
             start_time: Arc::new(RwLock::new(None)),
+            process_tree: Arc::new(ProcessTreeTracker::new()),
         }
     }
 
@@ -107,8 +110,9 @@ impl SecurityEngine {
             let de_bus = Arc::clone(&bus);
             let de_audit = Arc::clone(&audit);
             let de_event_count = Arc::clone(&event_count);
+            let de_process_tree = Arc::clone(&self.process_tree);
             tokio::spawn(async move {
-                Self::run_detection_loop(de_running, de_bus, de_audit, de_event_count).await;
+                Self::run_detection_loop(de_running, de_bus, de_audit, de_event_count, de_process_tree).await;
             });
         }
 
@@ -207,6 +211,7 @@ impl SecurityEngine {
         bus: Arc<EventBus>,
         audit: Arc<RwLock<AuditLog>>,
         event_count: Arc<AtomicUsize>,
+        process_tree: Arc<ProcessTreeTracker>,
     ) {
         info!("Detection evaluator loop started");
         let mut receiver = bus.subscribe();
@@ -215,6 +220,34 @@ impl SecurityEngine {
             match receiver.try_recv() {
                 Ok(event) => {
                     event_count.fetch_add(1, Ordering::Relaxed);
+
+                    let suspicious = process_tree.process_event(&event);
+                    for pattern in suspicious {
+                        warn!(
+                            pid = pattern.pid,
+                            name = %pattern.process_name,
+                            severity = %pattern.severity,
+                            mitre = ?pattern.mitre_technique,
+                            "{}",
+                            pattern.description
+                        );
+
+                        let mut audit_log = audit.write().await;
+                        let mut details = std::collections::HashMap::new();
+                        details.insert("event_type".into(), serde_json::json!("suspicious_process"));
+                        details.insert("severity".into(), serde_json::json!(format!("{}", pattern.severity)));
+                        details.insert("pid".into(), serde_json::json!(pattern.pid));
+                        details.insert("process_name".into(), serde_json::json!(pattern.process_name));
+                        details.insert("description".into(), serde_json::json!(pattern.description));
+                        details.insert("mitre_tactic".into(), serde_json::json!(pattern.mitre_tactic));
+                        details.insert("mitre_technique".into(), serde_json::json!(pattern.mitre_technique));
+                        audit_log.record(
+                            "detection.suspicious_process",
+                            "process_tree",
+                            "security_event",
+                            details,
+                        );
+                    }
 
                     let severity = Self::evaluate_event(&event);
 

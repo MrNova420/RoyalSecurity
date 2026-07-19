@@ -1,4 +1,4 @@
-pub mod prelude;
+﻿pub mod prelude;
 pub use royalsecurity_core as core;
 
 use royalsecurity_common::types::*;
@@ -9,6 +9,7 @@ use std::error::Error;
 use std::time::Instant;
 use tracing::info;
 use chrono::{DateTime, Utc};
+use std::sync::Arc;
 
 #[derive(Debug, thiserror::Error)]
 pub enum BootError {
@@ -25,17 +26,21 @@ pub enum BootEventType {
     BootConfigChanged,
     DriverLoaded,
     StartupItemAdded,
+    SuspiciousStartup,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BootEvent {
     pub event_type: BootEventType,
     pub details: String,
+    pub key_path: Option<String>,
+    pub value_name: Option<String>,
+    pub value_data: Option<String>,
     pub timestamp: DateTime<Utc>,
 }
 
 pub struct BootCollector {
-    _bus: EventBus,
+    bus: Arc<EventBus>,
     config: ModuleConfig,
     status: ModuleStatus,
     start_time: Option<Instant>,
@@ -44,12 +49,27 @@ pub struct BootCollector {
     events: Vec<BootEvent>,
     boot_times: Vec<DateTime<Utc>>,
     boot_count: u64,
+    startup_keys: Vec<String>,
 }
+
+unsafe impl Send for BootCollector {}
+unsafe impl Sync for BootCollector {}
 
 impl BootCollector {
     pub fn new(bus: EventBus) -> Self {
+        let mut startup_keys = Vec::new();
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run".into());
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce".into());
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunServices".into());
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows\CurrentVersion\RunServicesOnce".into());
+        startup_keys.push(r"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Run".into());
+        startup_keys.push(r"SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\RunOnce".into());
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer\Run".into());
+        startup_keys.push(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon".into());
+        startup_keys.push(r"SYSTEM\CurrentControlSet\Services".into());
+
         Self {
-            _bus: bus,
+            bus: Arc::new(bus),
             config: ModuleConfig::default(),
             status: ModuleStatus::Uninitialized,
             start_time: None,
@@ -58,6 +78,7 @@ impl BootCollector {
             events: Vec::new(),
             boot_times: Vec::new(),
             boot_count: 0,
+            startup_keys,
         }
     }
 
@@ -83,6 +104,117 @@ impl BootCollector {
         events
     }
 
+    #[cfg(target_os = "windows")]
+    pub fn read_startup_items(&mut self) -> Vec<BootEvent> {
+        use windows::Win32::System::Registry::{
+            RegOpenKeyExW, RegEnumValueW, RegCloseKey, HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER,
+            KEY_READ,
+        };
+
+        let mut items = Vec::new();
+
+        for key_path in &self.startup_keys {
+            let is_hkcu = key_path.starts_with("SOFTWARE") && !key_path.starts_with("SYSTEM");
+            let root = if is_hkcu { HKEY_CURRENT_USER } else { HKEY_LOCAL_MACHINE };
+
+            unsafe {
+                let key_path_wide: Vec<u16> = key_path.encode_utf16().chain(std::iter::once(0)).collect();
+                let mut hkey = Default::default();
+
+                if RegOpenKeyExW(root, windows::core::PCWSTR(key_path_wide.as_ptr()), 0, KEY_READ, &mut hkey).is_ok() {
+                    let mut index = 0;
+                    loop {
+                        let mut value_name = [0u16; 256];
+                        let mut name_len = 256u32;
+                        let mut value_data = [0u8; 4096];
+                        let mut data_len = 4096u32;
+                        let mut reg_type: u32 = 0;
+
+                        let result = RegEnumValueW(
+                            hkey,
+                            index,
+                            windows::core::PWSTR(value_name.as_mut_ptr()),
+                            &mut name_len,
+                            None,
+                            Some(&mut reg_type),
+                            Some(value_data.as_mut_ptr() as *mut u8),
+                            Some(&mut data_len),
+                        );
+
+                        if result.is_err() {
+                            break;
+                        }
+
+                        let name = String::from_utf16_lossy(&value_name[..name_len as usize]).to_string();
+                        let data_str = match reg_type {
+                            1 | 2 => {
+                                let slice = &value_data[..data_len as usize];
+                                String::from_utf16_lossy(
+                                    slice.chunks(2)
+                                        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+                                        .collect::<Vec<_>>()
+                                        .as_slice()
+                                ).trim_end_matches('\0').to_string()
+                            }
+                            _ => format!("(type {})", reg_type),
+                        };
+
+                        let suspicious = data_str.to_lowercase().contains("powershell")
+                            || data_str.to_lowercase().contains("cmd.exe /c")
+                            || data_str.to_lowercase().contains("mshta")
+                            || data_str.to_lowercase().contains("wscript")
+                            || data_str.to_lowercase().contains("cscript")
+                            || data_str.to_lowercase().contains("regsvr32")
+                            || data_str.to_lowercase().contains("rundll32")
+                            || data_str.to_lowercase().contains("certutil")
+                            || data_str.to_lowercase().contains("bitsadmin");
+
+                        let event_type = if suspicious {
+                            BootEventType::SuspiciousStartup
+                        } else {
+                            BootEventType::StartupItemAdded
+                        };
+
+                        items.push(BootEvent {
+                            event_type,
+                            details: format!("Startup: {} = {}", name, data_str),
+                            key_path: Some(key_path.clone()),
+                            value_name: Some(name),
+                            value_data: Some(data_str),
+                            timestamp: Utc::now(),
+                        });
+
+                        index += 1;
+                    }
+
+                    let _ = RegCloseKey(hkey);
+                }
+            }
+        }
+
+        self.events.extend(items.clone());
+        self.events_processed += items.len() as u64;
+        items
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn read_startup_items(&mut self) -> Vec<BootEvent> {
+        Vec::new()
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn get_system_uptime(&self) -> Option<u64> {
+        use windows::Win32::System::SystemInformation::GetTickCount64;
+        unsafe {
+            Some(GetTickCount64() / 1000)
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn get_system_uptime(&self) -> Option<u64> {
+        None
+    }
+
     pub fn record_boot_time(&mut self) {
         let now = Utc::now();
         self.boot_times.push(now);
@@ -90,6 +222,9 @@ impl BootCollector {
         self.events.push(BootEvent {
             event_type: BootEventType::SystemBoot,
             details: format!("System boot #{} recorded", self.boot_count),
+            key_path: None,
+            value_name: None,
+            value_data: None,
             timestamp: now,
         });
     }
@@ -98,6 +233,9 @@ impl BootCollector {
         self.events.push(BootEvent {
             event_type: BootEventType::SystemShutdown,
             details: reason.to_string(),
+            key_path: None,
+            value_name: None,
+            value_data: None,
             timestamp: Utc::now(),
         });
     }
@@ -106,6 +244,9 @@ impl BootCollector {
         self.events.push(BootEvent {
             event_type: BootEventType::BootConfigChanged,
             details: details.to_string(),
+            key_path: None,
+            value_name: None,
+            value_data: None,
             timestamp: Utc::now(),
         });
     }
@@ -114,14 +255,9 @@ impl BootCollector {
         self.events.push(BootEvent {
             event_type: BootEventType::DriverLoaded,
             details: format!("Driver loaded: {}", driver_name),
-            timestamp: Utc::now(),
-        });
-    }
-
-    pub fn record_startup_item(&mut self, item_name: &str) {
-        self.events.push(BootEvent {
-            event_type: BootEventType::StartupItemAdded,
-            details: format!("Startup item added: {}", item_name),
+            key_path: None,
+            value_name: None,
+            value_data: None,
             timestamp: Utc::now(),
         });
     }
@@ -163,10 +299,10 @@ impl SecurityModule for BootCollector {
         "Boot Collector"
     }
     fn version(&self) -> &str {
-        "0.1.0"
+        "0.2.0"
     }
     fn description(&self) -> &str {
-        "Collects boot events, startup items, and boot time analysis"
+        "Real startup item detection via registry queries and boot event monitoring"
     }
 
     async fn initialize(
@@ -248,12 +384,10 @@ mod tests {
         let mut collector = BootCollector::new(test_bus());
         collector.record_config_change("BCD modified");
         collector.record_driver_loaded("nvlddmkm.sys");
-        collector.record_startup_item("SecurityAgent");
         let events = collector.collect_events();
-        assert_eq!(events.len(), 3);
+        assert_eq!(events.len(), 2);
         assert_eq!(events[0].event_type, BootEventType::BootConfigChanged);
         assert_eq!(events[1].event_type, BootEventType::DriverLoaded);
-        assert_eq!(events[2].event_type, BootEventType::StartupItemAdded);
     }
 
     #[test]
@@ -282,5 +416,22 @@ mod tests {
         collector.record_boot_time();
         collector.record_shutdown("update");
         assert_eq!(collector.event_count(), 2);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_read_startup_items() {
+        let mut collector = BootCollector::new(test_bus());
+        let items = collector.read_startup_items();
+        assert!(items.len() > 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_get_system_uptime() {
+        let collector = BootCollector::new(test_bus());
+        let uptime = collector.get_system_uptime();
+        assert!(uptime.is_some());
+        assert!(uptime.unwrap() > 0);
     }
 }
