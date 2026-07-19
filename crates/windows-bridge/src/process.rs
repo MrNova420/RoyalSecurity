@@ -22,17 +22,20 @@ pub struct ProcessInfo {
 
 #[cfg(windows)]
 pub fn list_processes() -> Vec<ProcessInfo> {
+    use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
         PROCESSENTRY32W,
     };
-    use std::mem::zeroed;
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
 
     let mut processes = Vec::new();
     unsafe {
-        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-            .unwrap_or_default();
-        let mut entry: PROCESSENTRY32W = zeroed();
+        let snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            Ok(s) => s,
+            Err(_) => return processes,
+        };
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
         entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
 
         if Process32FirstW(snapshot, &mut entry).is_ok() {
@@ -40,15 +43,34 @@ pub fn list_processes() -> Vec<ProcessInfo> {
                 let name = String::from_utf16_lossy(&entry.szExeFile)
                     .trim_end_matches('\0')
                     .to_string();
+                let pid = entry.th32ProcessID;
+                let parent_pid = entry.th32ParentProcessID;
+
+                let (exe_path, memory_mb, user) = if pid > 0 {
+                    if let Ok(handle) =
+                        OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+                    {
+                        let exe = get_process_exe_path(handle);
+                        let mem = get_process_memory_mb(handle);
+                        let usr = get_process_user(handle);
+                        let _ = CloseHandle(handle);
+                        (exe, mem, usr)
+                    } else {
+                        (String::new(), 0u64, String::new())
+                    }
+                } else {
+                    (String::new(), 0u64, String::new())
+                };
+
                 processes.push(ProcessInfo {
-                    pid: entry.th32ProcessID,
+                    pid,
                     name,
-                    exe_path: String::new(),
+                    exe_path,
                     command_line: String::new(),
-                    parent_pid: entry.th32ParentProcessID,
-                    user: String::new(),
+                    parent_pid,
+                    user,
                     cpu_usage: 0.0,
-                    memory_mb: 0,
+                    memory_mb,
                     status: ProcessStatus::Running,
                 });
                 if Process32NextW(snapshot, &mut entry).is_err() {
@@ -56,9 +78,111 @@ pub fn list_processes() -> Vec<ProcessInfo> {
                 }
             }
         }
-        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+        let _ = CloseHandle(snapshot);
     }
     processes
+}
+
+#[cfg(windows)]
+fn get_process_exe_path(handle: windows::Win32::Foundation::HANDLE) -> String {
+    use windows::Win32::System::Threading::{QueryFullProcessImageNameW, PROCESS_NAME_FORMAT};
+
+    unsafe {
+        let mut buf = [0u16; 260];
+        let mut size = buf.len() as u32;
+        if QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_FORMAT(0),
+            windows::core::PWSTR(buf.as_mut_ptr()),
+            &mut size,
+        )
+        .is_ok()
+        {
+            String::from_utf16_lossy(&buf[..size as usize]).to_string()
+        } else {
+            String::new()
+        }
+    }
+}
+
+#[cfg(windows)]
+fn get_process_memory_mb(handle: windows::Win32::Foundation::HANDLE) -> u64 {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+
+    unsafe {
+        let mut counters: PROCESS_MEMORY_COUNTERS = std::mem::zeroed();
+        counters.cb = std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32;
+        if GetProcessMemoryInfo(handle, &mut counters, counters.cb).is_ok() {
+            (counters.WorkingSetSize / (1024 * 1024)) as u64
+        } else {
+            0
+        }
+    }
+}
+
+#[cfg(windows)]
+fn get_process_user(handle: windows::Win32::Foundation::HANDLE) -> String {
+    use windows::Win32::Foundation::{CloseHandle, LocalFree, HLOCAL};
+    use windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_QUERY, TOKEN_USER};
+    use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
+    use windows::Win32::System::Threading::OpenProcessToken;
+    use windows::core::PWSTR;
+
+    unsafe {
+        let mut token_handle = windows::Win32::Foundation::HANDLE::default();
+        if OpenProcessToken(handle, TOKEN_QUERY, &mut token_handle).is_err() {
+            return String::new();
+        }
+
+        let mut required_size = 0u32;
+        let _ = GetTokenInformation(
+            token_handle,
+            TokenUser,
+            None,
+            0,
+            &mut required_size,
+        );
+
+        if required_size == 0 {
+            let _ = CloseHandle(token_handle);
+            return String::new();
+        }
+
+        let mut buf: Vec<u8> = vec![0u8; required_size as usize];
+        let result = GetTokenInformation(
+            token_handle,
+            TokenUser,
+            Some(buf.as_mut_ptr() as *mut _),
+            required_size,
+            &mut required_size,
+        );
+        let _ = CloseHandle(token_handle);
+
+        if result.is_err() {
+            return String::new();
+        }
+
+        let token_user = &*(buf.as_ptr() as *const TOKEN_USER);
+        let sid = token_user.User.Sid;
+        let mut sid_str = PWSTR(std::ptr::null_mut());
+        if ConvertSidToStringSidW(sid, &mut sid_str).is_ok() && !sid_str.is_null() {
+            let ptr = sid_str.0;
+            let mut len = 0usize;
+            let mut p = ptr;
+            while *p != 0 {
+                len += 1;
+                p = p.add(1);
+            }
+            let result = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
+            let _ = LocalFree(HLOCAL(ptr as *mut _));
+            result
+        } else {
+            if !sid_str.is_null() {
+                let _ = LocalFree(HLOCAL(sid_str.0 as *mut _));
+            }
+            String::new()
+        }
+    }
 }
 
 #[cfg(not(windows))]

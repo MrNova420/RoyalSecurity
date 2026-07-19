@@ -37,9 +37,10 @@ pub struct NetworkConnection {
 
 #[cfg(windows)]
 pub fn list_connections() -> Vec<NetworkConnection> {
+    use std::net::Ipv4Addr;
     use windows::Win32::NetworkManagement::IpHelper::{
-        GetExtendedTcpTable,
-        TCP_TABLE_OWNER_PID_ALL,
+        GetExtendedTcpTable, GetExtendedUdpTable, TCP_TABLE_OWNER_PID_ALL,
+        UDP_TABLE_OWNER_PID,
     };
     use windows::Win32::Networking::WinSock::AF_INET;
 
@@ -65,11 +66,16 @@ pub fn list_connections() -> Vec<NetworkConnection> {
                 AF_INET.0 as u32,
                 TCP_TABLE_OWNER_PID_ALL,
                 0,
-            ) == 0 {
-                let table = &*(buf.as_ptr() as *const windows::Win32::NetworkManagement::IpHelper::MIB_TCPTABLE_OWNER_PID);
+            ) == 0
+            {
+                let table = &*(buf.as_ptr()
+                    as *const windows::Win32::NetworkManagement::IpHelper::MIB_TCPTABLE_OWNER_PID);
                 for i in 0..table.table.len() {
                     let row = &table.table[i];
-                    let port = u16::from_be(row.dwLocalPort as u16);
+                    let local_port = u16::from_be(row.dwLocalPort as u16);
+                    let remote_port = u16::from_be(row.dwRemotePort as u16);
+                    let local_ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
+                    let remote_ip = Ipv4Addr::from(u32::from_be(row.dwRemoteAddr));
                     let state = match row.dwState {
                         1 => ConnectionState::Established,
                         2 => ConnectionState::Listen,
@@ -78,15 +84,62 @@ pub fn list_connections() -> Vec<NetworkConnection> {
                         _ => ConnectionState::Established,
                     };
                     connections.push(NetworkConnection {
-                        local_addr: format!("0.0.0.0"),
-                        local_port: port,
-                        remote_addr: format!("0.0.0.0"),
-                        remote_port: 0,
+                        local_addr: local_ip.to_string(),
+                        local_port,
+                        remote_addr: remote_ip.to_string(),
+                        remote_port,
                         protocol: Protocol::Tcp,
                         state: state.clone(),
                         pid: row.dwOwningPid,
                         process_name: String::new(),
-                        direction: if state == ConnectionState::Listen { Direction::Inbound } else { Direction::Outbound },
+                        direction: if state == ConnectionState::Listen {
+                            Direction::Inbound
+                        } else {
+                            Direction::Outbound
+                        },
+                        flagged: false,
+                    });
+                }
+            }
+        }
+
+        let mut udp_size: u32 = 0;
+        let _ = GetExtendedUdpTable(
+            Some(std::ptr::null_mut()),
+            &mut udp_size,
+            false,
+            AF_INET.0 as u32,
+            UDP_TABLE_OWNER_PID,
+            0,
+        );
+
+        if udp_size > 0 {
+            let mut buf: Vec<u8> = vec![0u8; udp_size as usize];
+            if GetExtendedUdpTable(
+                Some(buf.as_mut_ptr() as *mut _),
+                &mut udp_size,
+                false,
+                AF_INET.0 as u32,
+        UDP_TABLE_OWNER_PID,
+                0,
+            ) == 0
+            {
+                let table = &*(buf.as_ptr()
+                    as *const windows::Win32::NetworkManagement::IpHelper::MIB_UDPTABLE_OWNER_PID);
+                for i in 0..table.table.len() {
+                    let row = &table.table[i];
+                    let local_port = u16::from_be(row.dwLocalPort as u16);
+                    let local_ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
+                    connections.push(NetworkConnection {
+                        local_addr: local_ip.to_string(),
+                        local_port,
+                        remote_addr: "0.0.0.0".to_string(),
+                        remote_port: 0,
+                        protocol: Protocol::Udp,
+                        state: ConnectionState::Established,
+                        pid: row.dwOwningPid,
+                        process_name: String::new(),
+                        direction: Direction::Outbound,
                         flagged: false,
                     });
                 }
