@@ -231,6 +231,11 @@ impl Default for WfpCollector {
     }
 }
 
+// SAFETY: engine_handle is only accessed under RwLock across awaits and never
+// used concurrently from multiple threads. The HANDLE is always properly closed.
+unsafe impl Send for WfpCollector {}
+unsafe impl Sync for WfpCollector {}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WfpFilterInfo {
     pub filter_id: u64,

@@ -86,7 +86,7 @@ export default function ActiveResponse() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 text-indigo-400 animate-spin" />
+          <Cpu className="w-5 h-5 animate-spin" style={{ color: 'var(--accent)' }} />
           <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading active response...</span>
         </div>
       </div>
@@ -96,62 +96,105 @@ export default function ActiveResponse() {
   const cfg = levelConfig[level] || levelConfig.none;
   const LevelIcon = cfg.icon;
 
+  const containmentCards = levels.map((l) => {
+    const lc = levelConfig[l];
+    const Icon = lc.icon;
+    const isActive = level === l;
+    return { level: l, icon: Icon, color: lc.color, bg: lc.bg, isActive };
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Active Response</h1>
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>ACTIVE RESPONSE</h1>
+          <p className="text-[10px] uppercase mt-1" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Containment & Automated Response</p>
+        </div>
         <div className="flex items-center gap-2">
           {feedback && (
-            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg" style={{
+              backgroundColor: feedback.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+              color: feedback.type === 'success' ? 'var(--low)' : 'var(--critical)',
+              border: `1px solid ${feedback.type === 'success' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+            }}>
               {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {feedback.message}
             </span>
           )}
-          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+          <button onClick={load} className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all"
+            style={{ border: '1px solid var(--accent)', color: 'var(--accent)', backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-muted)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
         </div>
       </div>
 
-      <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+      <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold">Containment Level</h2>
+          <span className="text-[10px] font-medium uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Containment Level</span>
+          {changing && <span className="text-[10px] animate-pulse" style={{ color: 'var(--accent)' }}>Updating...</span>}
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor: cfg.bg }}>
-            <LevelIcon className="w-5 h-5" style={{ color: cfg.color }} />
-            <span className="text-sm font-medium" style={{ color: cfg.color }}>{level.toUpperCase()}</span>
-          </div>
-          <select
-            value={level}
-            onChange={(e) => handleLevelChange(e.target.value)}
-            disabled={changing}
-            className="px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
-            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
-          >
-            {levels.map((l) => (
-              <option key={l} value={l}>{l.charAt(0).toUpperCase() + l.slice(1)}</option>
-            ))}
-          </select>
-          {changing && <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>Updating...</span>}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {containmentCards.map((c) => (
+            <button
+              key={c.level}
+              onClick={() => handleLevelChange(c.level)}
+              disabled={changing}
+              className="rounded-xl p-4 border transition-all text-left disabled:opacity-50"
+              style={{
+                backgroundColor: c.isActive ? 'var(--bg-elevated)' : 'var(--bg-card)',
+                borderColor: c.isActive ? c.color : 'var(--border-color)',
+                borderLeft: `4px solid ${c.color}`,
+                boxShadow: c.isActive ? `0 0 20px ${c.bg}` : 'none',
+              }}
+              onMouseEnter={(e) => { if (!c.isActive) e.currentTarget.style.borderColor = 'var(--border-active)'; }}
+              onMouseLeave={(e) => { if (!c.isActive) e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <c.icon className="w-4 h-4" style={{ color: c.color }} />
+                <span className="text-xs font-medium" style={{ color: c.color }}>{c.level.toUpperCase()}</span>
+              </div>
+              {c.isActive && (
+                <div className="text-[10px] px-2 py-0.5 rounded-full inline-block" style={{ backgroundColor: c.bg, color: c.color }}>
+                  Active
+                </div>
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-        <h2 className="text-sm font-semibold mb-3">Playbooks</h2>
+      <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-[10px] font-medium uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Playbooks</span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent-muted)', color: 'var(--accent)' }}>
+            {playbooks.length} available
+          </span>
+        </div>
         {playbooks.length === 0 ? (
-          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>No playbooks available</div>
+          <div className="py-8 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>No playbooks available</div>
         ) : (
           <div className="space-y-2">
             {playbooks.map((pb) => {
               const sc = statusColors[pb.status] || statusColors.inactive;
               return (
-                <div key={pb.id} className="flex items-center justify-between p-3 rounded-lg border" style={{ borderColor: 'var(--border-color)' }}>
+                <div key={pb.id} className="flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-md" style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--border-color)',
+                  borderLeft: '4px solid var(--accent)',
+                }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-active)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+                >
                   <div className="flex items-center gap-3">
-                    <FileSearch className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+                    <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                      <FileSearch className="w-4 h-4" style={{ color: 'var(--accent)' }} />
+                    </div>
                     <div>
-                      <div className="text-sm font-medium">{pb.name}</div>
+                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{pb.name}</div>
                       <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{pb.description}</div>
                     </div>
                   </div>
@@ -166,30 +209,35 @@ export default function ActiveResponse() {
         )}
       </div>
 
-      <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-        <h2 className="text-sm font-semibold mb-3">Quarantined Files</h2>
+      <div className="rounded-xl border p-5" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-[10px] font-medium uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Quarantined Files</span>
+          {quarantine.length > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: 'var(--critical)' }}>
+              {quarantine.length} files
+            </span>
+          )}
+        </div>
         {quarantine.length === 0 ? (
-          <div className="py-6 text-center text-sm" style={{ color: 'var(--text-secondary)' }}>No files quarantined</div>
+          <div className="py-8 text-center text-sm" style={{ color: 'var(--text-tertiary)' }}>No files quarantined</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b" style={{ borderColor: 'var(--border-color)' }}>
-                  <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Path</th>
-                  <th className="text-left py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Reason</th>
-                  <th className="text-right py-2 px-3 font-medium" style={{ color: 'var(--text-secondary)' }}>Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quarantine.map((q) => (
-                  <tr key={q.id} className="border-b hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border-color)' }}>
-                    <td className="py-2.5 px-3 font-mono text-[11px]">{q.path}</td>
-                    <td className="py-2.5 px-3" style={{ color: 'var(--text-secondary)' }}>{q.reason}</td>
-                    <td className="py-2.5 px-3 text-right" style={{ color: 'var(--text-secondary)' }}>{q.timestamp}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {quarantine.map((q) => (
+              <div key={q.id} className="flex items-center justify-between p-4 rounded-xl border transition-all hover:shadow-md" style={{
+                backgroundColor: 'var(--bg-elevated)',
+                borderColor: 'var(--border-color)',
+                borderLeft: '4px solid var(--critical)',
+              }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-active)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-[11px] mb-1" style={{ color: 'var(--text-primary)' }}>{q.path}</div>
+                  <div className="text-[11px]" style={{ color: 'var(--text-secondary)' }}>{q.reason}</div>
+                </div>
+                <div className="text-[10px] font-mono ml-4 shrink-0" style={{ color: 'var(--text-tertiary)' }}>{q.timestamp}</div>
+              </div>
+            ))}
           </div>
         )}
       </div>

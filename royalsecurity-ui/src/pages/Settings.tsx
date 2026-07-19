@@ -122,7 +122,7 @@ export default function SettingsPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 text-indigo-400 animate-spin" />
+          <Cpu className="w-5 h-5 animate-spin" style={{ color: 'var(--accent)' }} />
           <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading settings...</span>
         </div>
       </div>
@@ -130,23 +130,40 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Settings</h1>
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>SYSTEM CONFIGURATION</h1>
+          <p className="text-[10px] uppercase mt-1" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Agent Settings & Module Management</p>
+        </div>
         <div className="flex items-center gap-2">
           {feedback && (
-            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <span className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg" style={{
+              backgroundColor: feedback.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+              color: feedback.type === 'success' ? 'var(--low)' : 'var(--critical)',
+              border: `1px solid ${feedback.type === 'success' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+            }}>
               {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {feedback.message}
             </span>
           )}
-          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+          <button onClick={load} className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all"
+            style={{ border: '1px solid var(--accent)', color: 'var(--accent)', backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--accent-muted)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+          >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500 text-white hover:bg-indigo-600 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all disabled:opacity-50"
+            style={{
+              backgroundColor: 'var(--accent)',
+              color: 'var(--bg-primary)',
+            }}
+            onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = '0.9'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
           >
             <Save className="w-3.5 h-3.5" />
             {saving ? 'Saving...' : 'Save Changes'}
@@ -156,37 +173,37 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
-          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-            <h2 className="text-sm font-semibold mb-4">Agent Configuration</h2>
+          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeft: '4px solid var(--accent)' }}>
+            <span className="text-[10px] font-medium uppercase block mb-4" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Agent Configuration</span>
             <div className="space-y-4">
               <div>
-                <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Hostname</label>
+                <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Hostname</label>
                 <input
                   type="text"
                   value={config.hostname || ''}
                   onChange={(e) => setConfig({ ...config, hostname: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
-                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm border outline-none transition-all focus:border-[var(--border-active)]"
+                  style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Server URL</label>
+                <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Server URL</label>
                 <input
                   type="text"
                   value={config.server_url || ''}
                   onChange={(e) => setConfig({ ...config, server_url: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
-                  style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                  className="w-full px-4 py-2.5 rounded-xl text-sm border outline-none transition-all focus:border-[var(--border-active)]"
+                  style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Log Level</label>
+                  <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Log Level</label>
                   <select
                     value={config.log_level || 'info'}
                     onChange={(e) => setConfig({ ...config, log_level: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
-                    style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm border outline-none transition-all focus:border-[var(--border-active)]"
+                    style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                   >
                     <option value="debug">Debug</option>
                     <option value="info">Info</option>
@@ -195,12 +212,12 @@ export default function SettingsPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Alert Threshold</label>
+                  <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Alert Threshold</label>
                   <select
                     value={config.alert_threshold || 'medium'}
                     onChange={(e) => setConfig({ ...config, alert_threshold: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
-                    style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm border outline-none transition-all focus:border-[var(--border-active)]"
+                    style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
                   >
                     <option value="critical">Critical Only</option>
                     <option value="high">High+</option>
@@ -211,8 +228,8 @@ export default function SettingsPage() {
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
-                  Scan Interval (seconds): {config.scan_interval || 300}
+                <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>
+                  Scan Interval: {config.scan_interval || 300}s
                 </label>
                 <input
                   type="range"
@@ -221,15 +238,16 @@ export default function SettingsPage() {
                   step="30"
                   value={config.scan_interval || 300}
                   onChange={(e) => setConfig({ ...config, scan_interval: parseInt(e.target.value) })}
-                  className="w-full accent-indigo-500"
+                  className="w-full"
+                  style={{ accentColor: 'var(--accent)' }}
                 />
-                <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-secondary)' }}>
+                <div className="flex justify-between text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
                   <span>30s</span>
                   <span>1hr</span>
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--text-secondary)' }}>
+                <label className="text-[10px] font-medium uppercase block mb-2" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>
                   Max CPU Usage: {config.max_cpu_percent || 25}%
                 </label>
                 <input
@@ -239,31 +257,42 @@ export default function SettingsPage() {
                   step="5"
                   value={config.max_cpu_percent || 25}
                   onChange={(e) => setConfig({ ...config, max_cpu_percent: parseInt(e.target.value) })}
-                  className="w-full accent-indigo-500"
+                  className="w-full"
+                  style={{ accentColor: 'var(--accent)' }}
                 />
               </div>
             </div>
           </div>
 
-          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-            <h2 className="text-sm font-semibold mb-4">Behavior</h2>
+          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeft: '4px solid var(--accent)' }}>
+            <span className="text-[10px] font-medium uppercase block mb-4" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Behavior</span>
             <div className="space-y-3">
               {[
                 { key: 'auto_isolate' as const, label: 'Auto-Isolate on Critical', desc: 'Automatically isolate hosts when critical threats are detected' },
                 { key: 'telemetry_enabled' as const, label: 'Telemetry Collection', desc: 'Send anonymous usage data to improve detection accuracy' },
               ].map((item) => (
-                <div key={item.key} className="flex items-center justify-between py-2">
+                <div key={item.key} className="flex items-center justify-between p-3 rounded-xl border transition-all" style={{
+                  backgroundColor: 'var(--bg-elevated)',
+                  borderColor: 'var(--border-color)',
+                }}>
                   <div>
-                    <div className="text-xs font-medium">{item.label}</div>
-                    <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{item.desc}</div>
+                    <div className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{item.label}</div>
+                    <div className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{item.desc}</div>
                   </div>
                   <button
                     onClick={() => setConfig({ ...config, [item.key]: !config[item.key] })}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${config[item.key] ? 'bg-indigo-500' : 'bg-gray-600'}`}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{
+                      backgroundColor: config[item.key] ? 'var(--accent)' : 'var(--bg-card)',
+                      border: `1px solid ${config[item.key] ? 'var(--accent)' : 'var(--border-color)'}`,
+                    }}
                   >
                     <div
-                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-                      style={{ left: config[item.key] ? '22px' : '2px' }}
+                      className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                      style={{
+                        left: config[item.key] ? '22px' : '2px',
+                        backgroundColor: config[item.key] ? 'var(--bg-primary)' : 'var(--text-tertiary)',
+                      }}
                     />
                   </button>
                 </div>
@@ -271,9 +300,9 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-            <h2 className="text-sm font-semibold mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeft: '4px solid var(--accent)' }}>
+            <span className="text-[10px] font-medium uppercase block mb-4" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Scan Triggers</span>
+            <div className="grid grid-cols-2 gap-3">
               {[
                 { label: 'Quick Scan', type: 'quick' },
                 { label: 'Full System Scan', type: 'full' },
@@ -283,8 +312,14 @@ export default function SettingsPage() {
                 <button
                   key={scan.type}
                   onClick={() => handleScan(scan.type)}
-                  className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border hover:bg-white/5 transition-colors"
-                  style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+                  className="flex items-center justify-center gap-2 px-3 py-3 rounded-xl text-xs font-medium border transition-all hover:shadow-md"
+                  style={{
+                    backgroundColor: 'var(--bg-card)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = '0 0 15px rgba(201,168,76,0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
                 >
                   {scan.label}
                 </button>
@@ -293,10 +328,10 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+        <div className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeft: '4px solid var(--accent)' }}>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold">Modules</h2>
-            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+            <span className="text-[10px] font-medium uppercase" style={{ color: 'var(--text-secondary)', letterSpacing: '0.1em' }}>Modules</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--accent-muted)', color: 'var(--accent)' }}>
               {modules.filter(m => m.enabled).length}/{modules.length} active
             </span>
           </div>
@@ -306,26 +341,42 @@ export default function SettingsPage() {
               return (
                 <div
                   key={mod.id}
-                  className="flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-white/5"
-                  style={{ borderColor: 'var(--border-color)' }}
+                  className="flex items-center gap-3 p-4 rounded-xl border transition-all hover:shadow-md"
+                  style={{
+                    backgroundColor: 'var(--bg-elevated)',
+                    borderColor: 'var(--border-color)',
+                    borderLeft: `4px solid ${mod.enabled ? 'var(--accent)' : 'var(--border-color)'}`,
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-active)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
                 >
-                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-                    <Icon className="w-4 h-4" style={{ color: mod.enabled ? 'var(--accent)' : 'var(--text-secondary)' }} />
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--bg-card)' }}>
+                    <Icon className="w-4 h-4" style={{ color: mod.enabled ? 'var(--accent)' : 'var(--text-tertiary)' }} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium">{mod.name}</span>
-                      <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusColors[mod.status] }} />
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>{mod.name}</span>
+                      <div className="w-1.5 h-1.5 rounded-full" style={{
+                        backgroundColor: statusColors[mod.status],
+                        boxShadow: mod.status === 'running' ? '0 0 6px var(--low)' : 'none',
+                      }} />
                     </div>
-                    <p className="text-[10px] truncate" style={{ color: 'var(--text-secondary)' }}>{mod.description}</p>
+                    <p className="text-[10px] truncate" style={{ color: 'var(--text-tertiary)' }}>{mod.description}</p>
                   </div>
                   <button
                     onClick={() => toggleModule(mod.id)}
-                    className={`relative w-10 h-5 rounded-full transition-colors shrink-0 ${mod.enabled ? 'bg-indigo-500' : 'bg-gray-600'}`}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{
+                      backgroundColor: mod.enabled ? 'var(--accent)' : 'var(--bg-card)',
+                      border: `1px solid ${mod.enabled ? 'var(--accent)' : 'var(--border-color)'}`,
+                    }}
                   >
                     <div
-                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all"
-                      style={{ left: mod.enabled ? '22px' : '2px' }}
+                      className="absolute top-0.5 w-4 h-4 rounded-full transition-all"
+                      style={{
+                        left: mod.enabled ? '22px' : '2px',
+                        backgroundColor: mod.enabled ? 'var(--bg-primary)' : 'var(--text-tertiary)',
+                      }}
                     />
                   </button>
                 </div>

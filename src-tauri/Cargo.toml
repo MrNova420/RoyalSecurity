@@ -34,6 +34,22 @@ royalsecurity-vuln-management = { path = "../crates/vuln-management" }
 royalsecurity-collector-etw = { path = "../crates/collectors/collector-etw" }
 royalsecurity-collector-sysmon = { path = "../crates/collectors/collector-sysmon" }
 royalsecurity-collector-log = { path = "../crates/collectors/collector-log" }
+royalsecurity-collector-hooks = { path = "../crates/collectors/collector-hooks" }
+royalsecurity-collector-boot = { path = "../crates/collectors/collector-boot" }
+royalsecurity-collector-memory = { path = "../crates/collectors/collector-memory" }
+royalsecurity-collector-dns = { path = "../crates/collectors/collector-dns" }
+royalsecurity-collector-usb = { path = "../crates/collectors/collector-usb" }
+royalsecurity-collector-bluetooth = { path = "../crates/collectors/collector-bluetooth" }
+royalsecurity-collector-wifi = { path = "../crates/collectors/collector-wifi" }
+royalsecurity-collector-registry = { path = "../crates/collectors/collector-registry" }
+royalsecurity-collector-usn = { path = "../crates/collectors/collector-usn" }
+royalsecurity-collector-powershell = { path = "../crates/collectors/collector-powershell" }
+royalsecurity-collector-wfp = { path = "../crates/collectors/collector-wfp" }
+royalsecurity-collector-webcam = { path = "../crates/collectors/collector-webcam" }
+royalsecurity-collector-wmi = { path = "../crates/collectors/collector-wmi" }
+royalsecurity-collector-firmware = { path = "../crates/collectors/collector-firmware" }
+royalsecurity-collector-audio = { path = "../crates/collectors/collector-audio" }
+royalsecurity-collector-http = { path = "../crates/collectors/collector-http" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

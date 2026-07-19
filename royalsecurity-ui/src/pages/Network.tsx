@@ -89,8 +89,8 @@ export default function NetworkPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3">
-          <Wifi className="w-5 h-5 text-indigo-400 animate-pulse" />
-          <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading network connections...</span>
+          <Wifi className="w-5 h-5 animate-pulse" style={{ color: 'var(--accent)' }} />
+          <span className="text-sm font-mono uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>Establishing secure link...</span>
         </div>
       </div>
     );
@@ -100,22 +100,23 @@ export default function NetworkPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold">Network</h1>
+          <div className="w-1 h-8 rounded-full" style={{ background: 'linear-gradient(to bottom, var(--accent), transparent)' }} />
+          <h1 className="text-xl font-bold uppercase tracking-widest" style={{ color: 'var(--text-primary)' }}>Network Operations</h1>
           {flaggedCount > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--critical)' }}>
+            <span className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-widest" style={{ backgroundColor: 'rgba(220,38,38,0.15)', color: 'var(--critical)', border: '1px solid rgba(220,38,38,0.3)' }}>
               <AlertTriangle className="w-3 h-3" />
               {flaggedCount} flagged
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {feedback && (
-            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <span className="flex items-center gap-1.5 text-[10px] font-mono px-3 py-1.5 rounded border" style={feedback.type === 'success' ? { backgroundColor: 'rgba(34,197,94,0.1)', color: 'var(--low)', borderColor: 'rgba(34,197,94,0.3)' } : { backgroundColor: 'rgba(220,38,38,0.1)', color: 'var(--critical)', borderColor: 'rgba(220,38,38,0.3)' }}>
               {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {feedback.message}
             </span>
           )}
-          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors">
+          <button onClick={load} className="flex items-center gap-2 px-3 py-1.5 rounded text-[10px] font-semibold uppercase tracking-widest transition-all" style={{ border: '1px solid var(--accent)', color: 'var(--accent)', backgroundColor: 'transparent' }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(212,175,55,0.1)'; e.currentTarget.style.boxShadow = '0 0 20px rgba(212,175,55,0.15)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.boxShadow = 'none'; }}>
             <RefreshCw className="w-3.5 h-3.5" />
             Refresh
           </button>
@@ -124,148 +125,165 @@ export default function NetworkPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Active Connections', value: connections.length, icon: Wifi, color: 'var(--accent)' },
-          { label: 'Inbound', value: inboundCount, icon: ArrowDownLeft, color: 'var(--info)' },
-          { label: 'Outbound', value: outboundCount, icon: ArrowUpRight, color: 'var(--medium)' },
-          { label: 'Flagged', value: flaggedCount, icon: AlertTriangle, color: 'var(--critical)' },
+          { label: 'Active Connections', value: connections.length, icon: Wifi, accent: 'var(--accent)' },
+          { label: 'Inbound', value: inboundCount, icon: ArrowDownLeft, accent: 'var(--info)' },
+          { label: 'Outbound', value: outboundCount, icon: ArrowUpRight, accent: 'var(--medium)' },
+          { label: 'Flagged', value: flaggedCount, icon: AlertTriangle, accent: 'var(--critical)' },
         ].map((stat) => (
-          <div key={stat.label} className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+          <div key={stat.label} className="relative rounded-lg p-4 border-l-4 overflow-hidden transition-all duration-300" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeftColor: stat.accent }} onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--border-active)'; e.currentTarget.style.boxShadow = '0 0 24px rgba(212,175,55,0.06)'; }} onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] uppercase font-medium" style={{ color: 'var(--text-secondary)' }}>{stat.label}</span>
-              <stat.icon className="w-4 h-4" style={{ color: stat.color }} />
+              <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>{stat.label}</span>
+              <stat.icon className="w-4 h-4" style={{ color: stat.accent }} />
             </div>
-            <div className="text-xl font-bold">{stat.value}</div>
+            <div className="text-xl font-bold font-mono" style={{ color: 'var(--text-primary)' }}>{stat.value}</div>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-          <h2 className="text-sm font-semibold mb-4">Traffic Overview</h2>
+        <div className="lg:col-span-2 rounded-lg p-4 border-l-4" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeftColor: 'var(--accent)' }}>
+          <h2 className="text-[10px] uppercase tracking-widest font-semibold mb-4" style={{ color: 'var(--text-tertiary)' }}>Traffic Timeline</h2>
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={trafficData}>
               <defs>
                 <linearGradient id="inGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#d4af37" stopOpacity={0.35} />
+                  <stop offset="95%" stopColor="#d4af37" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="outGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#dc2626" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#dc2626" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" />
-              <XAxis dataKey="hour" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#1a2236', border: '1px solid #1e2d4a', borderRadius: '8px', fontSize: '12px' }} />
-              <Area type="monotone" dataKey="inbound" stroke="#3b82f6" fill="url(#inGrad)" strokeWidth={2} name="Inbound (KB)" />
-              <Area type="monotone" dataKey="outbound" stroke="#f97316" fill="url(#outGrad)" strokeWidth={2} name="Outbound (KB)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="hour" tick={{ fontSize: 10, fill: 'var(--text-tertiary)', fontFamily: 'monospace' }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text-tertiary)', fontFamily: 'monospace' }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '11px', fontFamily: 'monospace', color: 'var(--text-primary)' }} />
+              <Area type="monotone" dataKey="inbound" stroke="var(--accent)" fill="url(#inGrad)" strokeWidth={2} name="Inbound" />
+              <Area type="monotone" dataKey="outbound" stroke="#dc2626" fill="url(#outGrad)" strokeWidth={2} name="Outbound" />
             </AreaChart>
           </ResponsiveContainer>
-          <div className="flex justify-center gap-6 mt-2">
+          <div className="flex justify-center gap-6 mt-3">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-              <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Inbound</span>
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: 'var(--accent)' }} />
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>Inbound</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-orange-500" />
-              <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Outbound</span>
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#dc2626' }} />
+              <span className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>Outbound</span>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-          <h2 className="text-sm font-semibold mb-4">Protocols</h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={protocolData.length > 0 ? protocolData : [{ name: 'No Data', value: 0, color: '#4b5563' }]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#1a2236', border: '1px solid #1e2d4a', borderRadius: '8px', fontSize: '12px' }} />
-              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                {(protocolData.length > 0 ? protocolData : [{ name: 'No Data', value: 0, color: '#4b5563' }]).map((entry, index) => (
-                  <Cell key={index} fill={entry.color} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-          <div className="space-y-2 mt-3">
-            {topPorts.map(([port, data]) => (
-              <div key={port} className="flex justify-between text-xs">
-                <span style={{ color: 'var(--text-secondary)' }}>{data.service} ({port})</span>
-                <span className="font-medium">{data.count}</span>
-              </div>
-            ))}
-            {topPorts.length === 0 && <p className="text-xs text-center" style={{ color: 'var(--text-secondary)' }}>No port data</p>}
+        <div className="rounded-lg p-4 border-l-4" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeftColor: 'var(--info)' }}>
+          <h2 className="text-[10px] uppercase tracking-widest font-semibold mb-4" style={{ color: 'var(--text-tertiary)' }}>Protocol Breakdown</h2>
+          <div className="space-y-3">
+            {protocolData.length > 0 ? protocolData.map((p) => {
+              const maxVal = Math.max(...protocolData.map(d => d.value), 1);
+              const pct = (p.value / maxVal) * 100;
+              return (
+                <div key={p.name}>
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="font-mono uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>{p.name}</span>
+                    <span className="font-mono" style={{ color: 'var(--text-primary)' }}>{p.value}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+                    <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: p.color }} />
+                  </div>
+                </div>
+              );
+            }) : (
+              <p className="text-[10px] text-center uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>No protocol data</p>
+            )}
+          </div>
+          <div className="mt-5 pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
+            <h3 className="text-[10px] uppercase tracking-widest font-semibold mb-3" style={{ color: 'var(--text-tertiary)' }}>Top Ports</h3>
+            <div className="space-y-2">
+              {topPorts.map(([port, data]) => (
+                <div key={port} className="flex justify-between text-[11px]">
+                  <span className="font-mono" style={{ color: 'var(--text-secondary)' }}>{data.service} <span style={{ color: 'var(--text-tertiary)' }}>({port})</span></span>
+                  <span className="font-mono font-semibold" style={{ color: 'var(--text-primary)' }}>{data.count}</span>
+                </div>
+              ))}
+              {topPorts.length === 0 && <p className="text-[10px] text-center uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>No port data</p>}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
-          <input
-            type="text"
-            placeholder="Search by IP, port, or process..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg text-sm border outline-none focus:ring-1 focus:ring-indigo-500"
-            style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
-          />
+      <div className="rounded-lg p-4 border-l-4" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', borderLeftColor: 'var(--critical)' }}>
+        <h2 className="text-[10px] uppercase tracking-widest font-semibold mb-3" style={{ color: 'var(--text-tertiary)' }}>Block IP Address</h2>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
+            <input
+              type="text"
+              placeholder="Search by IP, port, or process..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded text-sm font-mono border outline-none transition-all duration-200"
+              style={{ backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.boxShadow = '0 0 16px rgba(212,175,55,0.12)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; e.currentTarget.style.boxShadow = 'none'; }}
+            />
+          </div>
+          <button
+            onClick={() => setFlaggedOnly(!flaggedOnly)}
+            className="flex items-center gap-2 px-3 py-2 rounded text-[10px] font-semibold uppercase tracking-widest border transition-all duration-200"
+            style={flaggedOnly ? { backgroundColor: 'rgba(220,38,38,0.15)', color: 'var(--critical)', borderColor: 'rgba(220,38,38,0.4)' } : { backgroundColor: 'var(--bg-elevated)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Flagged Only
+          </button>
         </div>
-        <button
-          onClick={() => setFlaggedOnly(!flaggedOnly)}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${flaggedOnly ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'hover:bg-white/5'}`}
-          style={!flaggedOnly ? { backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)', color: 'var(--text-secondary)' } : {}}
-        >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          Flagged Only
-        </button>
       </div>
 
-      <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+      <div className="rounded-lg border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+        <div className="px-4 py-2.5 border-b" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-elevated)' }}>
+          <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Active Connections</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
-              <tr className="border-b" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Direction</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Local Address</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Remote Address</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Protocol</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>State</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Process</th>
-                <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Country</th>
-                <th className="text-center py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Flag</th>
-                <th className="text-right py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Action</th>
+              <tr className="border-b" style={{ borderColor: 'var(--border-color)' }}>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Dir</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Local Address</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Remote Address</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Protocol</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>State</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Process</th>
+                <th className="text-left py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Country</th>
+                <th className="text-center py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Flag</th>
+                <th className="text-right py-2.5 px-4 text-[10px] uppercase tracking-widest font-semibold" style={{ color: 'var(--text-tertiary)' }}>Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="py-8 text-center" style={{ color: 'var(--text-secondary)' }}>No connections found</td></tr>
+                <tr><td colSpan={9} className="py-10 text-center text-[10px] uppercase tracking-widest" style={{ color: 'var(--text-tertiary)' }}>No connections found</td></tr>
               ) : filtered.map((conn) => (
-                <tr key={conn.id} className="border-b hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border-color)' }}>
+                <tr key={conn.id} className="border-b transition-colors" style={{ borderColor: 'var(--border-color)' }} onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'var(--bg-elevated)'; }} onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}>
                   <td className="py-2.5 px-4">
                     {conn.direction === 'inbound' ? (
-                      <ArrowDownLeft className="w-4 h-4 text-blue-400" />
+                      <ArrowDownLeft className="w-4 h-4" style={{ color: 'var(--accent)' }} />
                     ) : (
-                      <ArrowUpRight className="w-4 h-4 text-orange-400" />
+                      <ArrowUpRight className="w-4 h-4" style={{ color: 'var(--medium)' }} />
                     )}
                   </td>
-                  <td className="py-2.5 px-4 font-mono text-[11px]">{conn.local_addr}:{conn.local_port}</td>
+                  <td className="py-2.5 px-4 font-mono text-[11px]" style={{ color: 'var(--text-primary)' }}>{conn.local_addr}:{conn.local_port}</td>
                   <td className="py-2.5 px-4 font-mono text-[11px]" style={{ color: conn.flagged ? 'var(--critical)' : 'var(--text-primary)' }}>
                     {conn.remote_addr}:{conn.remote_port}
                   </td>
                   <td className="py-2.5 px-4">
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium" style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase" style={{ backgroundColor: 'rgba(212,175,55,0.1)', color: 'var(--accent)', border: '1px solid rgba(212,175,55,0.2)' }}>
                       {conn.protocol}
                     </span>
                   </td>
-                  <td className="py-2.5 px-4 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{conn.state}</td>
-                  <td className="py-2.5 px-4 text-[11px]">{conn.process}</td>
-                  <td className="py-2.5 px-4 text-[11px]" style={{ color: 'var(--text-secondary)' }}>{conn.country || '-'}</td>
+                  <td className="py-2.5 px-4 text-[11px] font-mono" style={{ color: 'var(--text-secondary)' }}>{conn.state}</td>
+                  <td className="py-2.5 px-4 text-[11px]" style={{ color: 'var(--text-primary)' }}>{conn.process}</td>
+                  <td className="py-2.5 px-4 text-[11px]" style={{ color: 'var(--text-tertiary)' }}>{conn.country || '-'}</td>
                   <td className="py-2.5 px-4 text-center">
                     {conn.flagged && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--critical)' }}>
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold uppercase" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--critical)', border: '1px solid rgba(220,38,38,0.25)' }}>
                         <AlertTriangle className="w-2.5 h-2.5" />
                         Threat
                       </span>
@@ -275,11 +293,14 @@ export default function NetworkPage() {
                     {conn.flagged && (
                       <button
                         onClick={() => handleBlockIp(conn.remote_addr)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+                        className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono font-semibold uppercase transition-all duration-200"
+                        style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--critical)', border: '1px solid rgba(220,38,38,0.25)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.25)'; e.currentTarget.style.boxShadow = '0 0 12px rgba(220,38,38,0.15)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(220,38,38,0.12)'; e.currentTarget.style.boxShadow = 'none'; }}
                         title={`Block ${conn.remote_addr}`}
                       >
                         <Ban className="w-3 h-3" />
-                        Block IP
+                        Block
                       </button>
                     )}
                   </td>

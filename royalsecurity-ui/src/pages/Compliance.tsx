@@ -44,6 +44,7 @@ export default function Compliance() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState('CIS');
 
   const showFeedback = (type: 'success' | 'error', message: string) => {
     setFeedback({ type, message });
@@ -113,20 +114,58 @@ export default function Compliance() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3">
-          <Cpu className="w-5 h-5 text-indigo-400 animate-spin" />
+          <Cpu className="w-5 h-5 text-[var(--accent)] animate-spin" />
           <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading compliance data...</span>
         </div>
       </div>
     );
   }
 
+  const overallScore = frameworks.length > 0 ? Math.round(frameworks.reduce((a, f) => a + f.score, 0) / frameworks.length) : 0;
+  const circumference = 2 * Math.PI * 54;
+  const strokeDashoffset = circumference - (overallScore / 100) * circumference;
+
+  const filteredFindings = activeTab === 'ALL'
+    ? findings
+    : findings.filter((f: any) => {
+        if (activeTab === 'CIS') return f.framework?.includes('CIS');
+        if (activeTab === 'STIG') return f.framework?.includes('STIG');
+        if (activeTab === 'NIST') return f.framework?.includes('NIST');
+        return true;
+      });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold">Compliance</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-bold uppercase tracking-widest" style={{ color: 'var(--accent)' }}>Compliance Monitor</h1>
+          <div className="flex items-center gap-1 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-color)' }}>
+            {['ALL', 'CIS', 'STIG', 'NIST'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="px-3 py-1 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-all"
+                style={{
+                  backgroundColor: activeTab === tab ? 'var(--accent)' : 'transparent',
+                  color: activeTab === tab ? '#000' : 'var(--text-secondary)',
+                  letterSpacing: '0.1em',
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
           {feedback && (
-            <span className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg ${feedback.type === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+            <span
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
+              style={{
+                backgroundColor: feedback.type === 'success' ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                color: feedback.type === 'success' ? 'var(--low)' : 'var(--critical)',
+                border: `1px solid ${feedback.type === 'success' ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+              }}
+            >
               {feedback.type === 'success' ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
               {feedback.message}
             </span>
@@ -134,7 +173,15 @@ export default function Compliance() {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/30 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all disabled:opacity-50"
+            style={{
+              backgroundColor: 'transparent',
+              color: 'var(--accent)',
+              border: '1px solid var(--accent)',
+              letterSpacing: '0.05em',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(212,175,55,0.1)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
           >
             <Download className="w-3.5 h-3.5" />
             {exporting ? 'Exporting...' : 'Export Report'}
@@ -142,31 +189,88 @@ export default function Compliance() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div
+          className="rounded-xl p-6 flex flex-col items-center justify-center"
+          style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}
+        >
+          <span className="text-[10px] uppercase font-semibold mb-4" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Overall Score</span>
+          <div className="relative w-32 h-32">
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="54" fill="none" stroke="var(--border-color)" strokeWidth="8" />
+              <circle
+                cx="60" cy="60" r="54"
+                fill="none"
+                stroke="url(#goldGradient)"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                className="transition-all duration-1000 ease-out"
+              />
+              <defs>
+                <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#D4AF37" />
+                  <stop offset="50%" stopColor="#FFD700" />
+                  <stop offset="100%" stopColor="#B8860B" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-3xl font-bold" style={{ color: 'var(--accent)' }}>{overallScore}%</span>
+              <span className="text-[9px] uppercase mt-1" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Compliant</span>
+            </div>
+          </div>
+        </div>
+
         {frameworks.map((fw) => (
-          <div key={fw.name} className="rounded-xl p-5 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
+          <div
+            key={fw.name}
+            className="rounded-xl p-5 border-l-4 transition-all duration-300"
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderLeftColor: fw.color,
+              borderTop: '1px solid var(--border-color)',
+              borderRight: '1px solid var(--border-color)',
+              borderBottom: '1px solid var(--border-color)',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-active)';
+              e.currentTarget.style.boxShadow = `0 0 20px rgba(212,175,55,0.08)`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--border-color)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5" style={{ color: fw.color }} />
-                <span className="text-sm font-semibold">{fw.name}</span>
+                <Shield className="w-4 h-4" style={{ color: fw.color }} />
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-primary)', letterSpacing: '0.05em' }}>{fw.name}</span>
               </div>
-              <span className="text-2xl font-bold" style={{ color: fw.color }}>{fw.score}%</span>
+              <span className="text-xl font-bold" style={{ color: fw.color }}>{fw.score}%</span>
             </div>
-            <div className="h-2.5 rounded-full mb-4" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-              <div className="h-2.5 rounded-full transition-all" style={{ width: `${fw.score}%`, backgroundColor: fw.color }} />
+            <div className="h-2 rounded-full mb-4 overflow-hidden" style={{ backgroundColor: 'var(--bg-elevated)' }}>
+              <div
+                className="h-full rounded-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${fw.score}%`,
+                  background: `linear-gradient(90deg, #B8860B, #D4AF37, #FFD700)`,
+                }}
+              />
             </div>
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.1)' }}>
-                <div className="text-sm font-bold text-green-400">{fw.passed}</div>
-                <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Passed</div>
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(34,197,94,0.08)' }}>
+                <div className="text-sm font-bold" style={{ color: 'var(--low)' }}>{fw.passed}</div>
+                <div className="text-[10px] uppercase" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Pass</div>
               </div>
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.1)' }}>
-                <div className="text-sm font-bold text-red-400">{fw.failed}</div>
-                <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Failed</div>
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(239,68,68,0.08)' }}>
+                <div className="text-sm font-bold" style={{ color: 'var(--critical)' }}>{fw.failed}</div>
+                <div className="text-[10px] uppercase" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Fail</div>
               </div>
-              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(234,179,8,0.1)' }}>
-                <div className="text-sm font-bold text-yellow-400">{fw.warnings}</div>
-                <div className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>Warnings</div>
+              <div className="p-2 rounded-lg" style={{ backgroundColor: 'rgba(234,179,8,0.08)' }}>
+                <div className="text-sm font-bold" style={{ color: 'var(--medium)' }}>{fw.warnings}</div>
+                <div className="text-[10px] uppercase" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Warn</div>
               </div>
             </div>
           </div>
@@ -174,26 +278,32 @@ export default function Compliance() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-          <h2 className="text-sm font-semibold mb-4">Category Coverage</h2>
+        <div
+          className="rounded-xl p-4 border"
+          style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+        >
+          <span className="text-[10px] uppercase font-semibold block mb-4" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Category Coverage</span>
           <ResponsiveContainer width="100%" height={280}>
             <RadarChart data={radarData}>
-              <PolarGrid stroke="#1e2d4a" />
-              <PolarAngleAxis dataKey="category" tick={{ fontSize: 9, fill: '#9ca3af' }} />
-              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 8, fill: '#9ca3af' }} />
-              <Radar name="Score" dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} strokeWidth={2} />
+              <PolarGrid stroke="var(--border-color)" />
+              <PolarAngleAxis dataKey="category" tick={{ fontSize: 9, fill: 'var(--text-tertiary)' }} />
+              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 8, fill: 'var(--text-tertiary)' }} />
+              <Radar name="Score" dataKey="score" stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.15} strokeWidth={2} />
             </RadarChart>
           </ResponsiveContainer>
         </div>
 
-        <div className="rounded-xl p-4 border" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-          <h2 className="text-sm font-semibold mb-4">Results by Framework</h2>
+        <div
+          className="rounded-xl p-4 border"
+          style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+        >
+          <span className="text-[10px] uppercase font-semibold block mb-4" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Results by Framework</span>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={frameworks.length > 0 ? frameworks : [{ name: 'CIS', passed: 0, warnings: 0, failed: 0, score: 0, total: 0, color: '#6366f1' }]}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2d4a" />
-              <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} />
-              <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#1a2236', border: '1px solid #1e2d4a', borderRadius: '8px', fontSize: '12px' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={{ backgroundColor: 'var(--bg-elevated)', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '12px' }} />
               <Bar dataKey="passed" stackId="a" fill="#22c55e" />
               <Bar dataKey="warnings" stackId="a" fill="#eab308" />
               <Bar dataKey="failed" stackId="a" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -207,57 +317,90 @@ export default function Compliance() {
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded" style={{ backgroundColor: item.color }} />
-                <span className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>{item.label}</span>
+                <span className="text-[10px] uppercase" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>{item.label}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
 
-      {findings.length > 0 && (
-        <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}>
-          <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-            <span className="text-xs font-semibold">Compliance Findings</span>
-            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(239,68,68,0.15)', color: 'var(--critical)' }}>
-              {findings.filter((f: any) => f.status === 'failed').length} failures
+      {filteredFindings.length > 0 && (
+        <div
+          className="rounded-xl border overflow-hidden"
+          style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+        >
+          <div
+            className="px-4 py-3 border-b flex items-center justify-between"
+            style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-elevated)' }}
+          >
+            <span className="text-[10px] uppercase font-semibold" style={{ color: 'var(--text-tertiary)', letterSpacing: '0.1em' }}>Compliance Findings</span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+              style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: 'var(--critical)', border: '1px solid rgba(239,68,68,0.2)' }}
+            >
+              {filteredFindings.filter((f: any) => f.status === 'failed').length} failures
             </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b" style={{ borderColor: 'var(--border-color)' }}>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Status</th>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Framework</th>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Control</th>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Severity</th>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Title</th>
-                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-secondary)' }}>Description</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Status</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Framework</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Control</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Severity</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Title</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--text-tertiary)' }}>Description</th>
                 </tr>
               </thead>
               <tbody>
-                {findings.map((finding: any, idx: number) => {
+                {filteredFindings.map((finding: any, idx: number) => {
                   const st = statusColors[finding.status] || statusColors.failed;
-                  const StatusIcon = st.icon;
+                  const dotColor = finding.status === 'passed' ? 'var(--low)' : finding.status === 'warning' ? 'var(--medium)' : 'var(--critical)';
                   return (
-                    <tr key={finding.id || idx} className="border-b hover:bg-white/5 transition-colors" style={{ borderColor: 'var(--border-color)' }}>
+                    <tr
+                      key={finding.id || idx}
+                      className="border-b transition-colors"
+                      style={{ borderColor: 'var(--border-color)' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(212,175,55,0.03)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                    >
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium" style={{ backgroundColor: st.bg, color: st.color }}>
-                          <StatusIcon className="w-3 h-3" />
-                          {finding.status}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="w-2 h-2 rounded-full shrink-0"
+                            style={{
+                              backgroundColor: dotColor,
+                              boxShadow: `0 0 6px ${dotColor}`,
+                            }}
+                          />
+                          <span className="text-[10px] uppercase font-semibold" style={{ color: dotColor, letterSpacing: '0.05em' }}>
+                            {finding.status}
+                          </span>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
-                        <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: `${frameworkColors[finding.framework] || 'var(--accent)'}20`, color: frameworkColors[finding.framework] || 'var(--accent)' }}>
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase"
+                          style={{
+                            backgroundColor: `${frameworkColors[finding.framework] || 'var(--accent)'}15`,
+                            color: frameworkColors[finding.framework] || 'var(--accent)',
+                            letterSpacing: '0.05em',
+                          }}
+                        >
                           {finding.framework}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono text-[11px]" style={{ color: 'var(--text-secondary)' }}>{finding.control}</td>
+                      <td className="py-3 px-4 font-mono text-[11px]" style={{ color: 'var(--accent)' }}>{finding.control}</td>
                       <td className="py-3 px-4">
-                        <span className="text-[10px] font-semibold uppercase" style={{ color: severityColors[finding.severity] || 'var(--text-secondary)' }}>
+                        <span
+                          className="text-[10px] font-semibold uppercase"
+                          style={{ color: severityColors[finding.severity] || 'var(--text-secondary)', letterSpacing: '0.1em' }}
+                        >
                           {finding.severity}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-medium">{finding.title}</td>
+                      <td className="py-3 px-4 font-medium" style={{ color: 'var(--text-primary)' }}>{finding.title}</td>
                       <td className="py-3 px-4" style={{ color: 'var(--text-secondary)' }}>{finding.description}</td>
                     </tr>
                   );

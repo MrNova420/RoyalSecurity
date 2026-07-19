@@ -1361,9 +1361,177 @@ fn main() {
             let _ = sysmon.start().await;
 
             let mut log_collector = royalsecurity_collector_log::LogCollector::new(
-                collector_bus,
+                collector_bus.clone(),
             );
             let _ = log_collector.start();
+
+            // Hooks collector - IAT/EAT hook detection
+            #[cfg(target_os = "windows")]
+            {
+                let mut hooks = royalsecurity_collector_hooks::HooksCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut hooks).await {
+                    tracing::warn!(error = %e, "Hooks collector failed");
+                } else {
+                    tracing::info!("Hooks collector started");
+                }
+            }
+
+            // Boot collector - startup item monitoring
+            #[cfg(target_os = "windows")]
+            {
+                let mut boot = royalsecurity_collector_boot::BootCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut boot).await {
+                    tracing::warn!(error = %e, "Boot collector failed");
+                } else {
+                    tracing::info!("Boot collector started");
+                }
+            }
+
+            // Memory collector - memory region scanning
+            #[cfg(target_os = "windows")]
+            {
+                let mut memory = royalsecurity_collector_memory::MemoryCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut memory).await {
+                    tracing::warn!(error = %e, "Memory collector failed");
+                } else {
+                    tracing::info!("Memory collector started");
+                }
+            }
+
+            // DNS collector - ETW DNS monitoring
+            #[cfg(target_os = "windows")]
+            {
+                let mut dns = royalsecurity_collector_dns::DnsCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut dns).await {
+                    tracing::warn!(error = %e, "DNS collector failed");
+                } else {
+                    tracing::info!("DNS collector started");
+                }
+            }
+
+            // USB collector
+            #[cfg(target_os = "windows")]
+            {
+                let usb = royalsecurity_collector_usb::UsbCollector::new();
+                match usb.start().await {
+                    Ok(()) => tracing::info!("USB collector started"),
+                    Err(e) => tracing::warn!(error = %e, "USB collector failed"),
+                }
+            }
+
+            // Bluetooth collector
+            #[cfg(target_os = "windows")]
+            {
+                let mut bluetooth = royalsecurity_collector_bluetooth::BluetoothCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut bluetooth).await {
+                    tracing::warn!(error = %e, "Bluetooth collector failed");
+                } else {
+                    tracing::info!("Bluetooth collector started");
+                }
+            }
+
+            // WiFi collector
+            #[cfg(target_os = "windows")]
+            {
+                let wifi = royalsecurity_collector_wifi::WifiCollector::new();
+                match wifi.start().await {
+                    Ok(()) => tracing::info!("WiFi collector started"),
+                    Err(e) => tracing::warn!(error = %e, "WiFi collector failed"),
+                }
+            }
+
+            // Registry collector
+            #[cfg(target_os = "windows")]
+            {
+                let registry = royalsecurity_collector_registry::RegistryCollector::new();
+                match registry.start().await {
+                    Ok(()) => tracing::info!("Registry collector started"),
+                    Err(e) => tracing::warn!(error = %e, "Registry collector failed"),
+                }
+            }
+
+            // USN collector
+            #[cfg(target_os = "windows")]
+            {
+                let usn = royalsecurity_collector_usn::UsnCollector::new();
+                match usn.start().await {
+                    Ok(()) => tracing::info!("USN collector started"),
+                    Err(e) => tracing::warn!(error = %e, "USN collector failed"),
+                }
+            }
+
+            // PowerShell collector
+            #[cfg(target_os = "windows")]
+            {
+                let ps = royalsecurity_collector_powershell::PowershellCollector::new();
+                match ps.start().await {
+                    Ok(()) => tracing::info!("PowerShell collector started"),
+                    Err(e) => tracing::warn!(error = %e, "PowerShell collector failed"),
+                }
+            }
+
+            // WFP collector
+            #[cfg(target_os = "windows")]
+            {
+                let wfp = royalsecurity_collector_wfp::WfpCollector::new();
+                match wfp.start().await {
+                    Ok(()) => tracing::info!("WFP collector started"),
+                    Err(e) => tracing::warn!(error = %e, "WFP collector failed"),
+                }
+            }
+
+            // Webcam collector
+            #[cfg(target_os = "windows")]
+            {
+                let webcam = royalsecurity_collector_webcam::WebcamCollector::new();
+                match webcam.start().await {
+                    Ok(()) => tracing::info!("Webcam collector started"),
+                    Err(e) => tracing::warn!(error = %e, "Webcam collector failed"),
+                }
+            }
+
+            // WMI collector
+            #[cfg(target_os = "windows")]
+            {
+                let wmi = royalsecurity_collector_wmi::WmiCollector::new();
+                match wmi.start().await {
+                    Ok(()) => tracing::info!("WMI collector started"),
+                    Err(e) => tracing::warn!(error = %e, "WMI collector failed"),
+                }
+            }
+
+            // Firmware collector
+            #[cfg(target_os = "windows")]
+            {
+                let mut firmware = royalsecurity_collector_firmware::FirmwareCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut firmware).await {
+                    tracing::warn!(error = %e, "Firmware collector failed");
+                } else {
+                    tracing::info!("Firmware collector started");
+                }
+            }
+
+            // Audio collector
+            #[cfg(target_os = "windows")]
+            {
+                let mut audio = royalsecurity_collector_audio::AudioCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut audio).await {
+                    tracing::warn!(error = %e, "Audio collector failed");
+                } else {
+                    tracing::info!("Audio collector started");
+                }
+            }
+
+            // HTTP collector
+            #[cfg(target_os = "windows")]
+            {
+                let mut http = royalsecurity_collector_http::HttpCollector::new(collector_bus.clone());
+                if let Err(e) = SecurityModule::start(&mut http).await {
+                    tracing::warn!(error = %e, "HTTP collector failed");
+                } else {
+                    tracing::info!("HTTP collector started");
+                }
+            }
 
             tracing::info!("Real-time collectors initialized");
 
