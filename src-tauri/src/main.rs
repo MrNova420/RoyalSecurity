@@ -14,6 +14,7 @@ use royalsecurity_core::ppl::{ProcessProtection, ProtectionConfig, ProtectionSta
 use royalsecurity_core::registry::ModuleRegistry;
 use royalsecurity_core::tpm::TpmManager;
 use royalsecurity_core::engine::{SecurityEngine, ScanType};
+use royalsecurity_core::module::SecurityModule;
 
 use royalsecurity_common::types::{SecurityEventEnvelope, SecurityEvent, ProcessInfo};
 
@@ -1342,6 +1343,17 @@ fn main() {
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             tracing::info!("Starting real-time collectors");
+
+            #[cfg(target_os = "windows")]
+            {
+                let mut etw = royalsecurity_collector_etw::collector::EtwCollector::new(
+                    collector_bus.clone(),
+                );
+                match etw.start().await {
+                    Ok(()) => tracing::info!("ETW collector started (callback-based)"),
+                    Err(e) => tracing::warn!(error = %e, "ETW collector failed to start"),
+                }
+            }
 
             let sysmon = royalsecurity_collector_sysmon::SysmonCollector::new(
                 collector_bus.clone(),
