@@ -208,6 +208,106 @@ impl AudioCollector {
             self.known_unauthorized.push(process_name.to_string());
         }
     }
+
+    #[cfg(target_os = "windows")]
+    pub fn enumerate_audio_devices(&mut self) -> Vec<AudioDevice> {
+        use windows::Win32::Media::Audio::{
+            MMDeviceEnumerator, eCapture, DEVICE_STATE_ACTIVE,
+        };
+        use windows::Win32::Devices::FunctionDiscovery::{
+            PKEY_Device_FriendlyName, PKEY_DeviceInterface_FriendlyName,
+        };
+        use windows::Win32::System::Com::{
+            CoCreateInstance, CoInitializeEx, CoUninitialize,
+            CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ,
+        };
+        use windows::Win32::System::Com::StructuredStorage::PropVariantToString;
+
+        unsafe fn read_prop_string(
+            store: &windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore,
+            key: *const windows::Win32::UI::Shell::PropertiesSystem::PROPERTYKEY,
+        ) -> String {
+            let propv = match store.GetValue(key) {
+                Ok(p) => p,
+                Err(_) => return String::new(),
+            };
+            let mut buf = vec![0u16; 256];
+            match PropVariantToString(&propv, &mut buf) {
+                Ok(()) => {
+                    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+                    String::from_utf16_lossy(&buf[..len])
+                }
+                Err(_) => String::new(),
+            }
+        }
+        let mut discovered = Vec::new();
+
+        let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+
+        let enumeration_result: windows::core::Result<()> = (|| unsafe {
+            let enumerator = CoCreateInstance::<_, windows::Win32::Media::Audio::IMMDeviceEnumerator>(
+                &MMDeviceEnumerator,
+                None,
+                CLSCTX_ALL,
+            )?;
+
+            let collection = enumerator.EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE)?;
+
+            let count = collection.GetCount()?;
+
+            for i in 0..count {
+                let device = match collection.Item(i) {
+                    Ok(d) => d,
+                    Err(_) => continue,
+                };
+
+                let store = match device.OpenPropertyStore(STGM_READ) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+
+                let iface_name = read_prop_string(&store, &PKEY_DeviceInterface_FriendlyName);
+                let dev_name = read_prop_string(&store, &PKEY_Device_FriendlyName);
+
+                let id = match device.GetId() {
+                    Ok(pwstr) => pwstr.to_string().unwrap_or_else(|_| format!("audio_{i}")),
+                    Err(_) => format!("audio_{i}"),
+                };
+
+                let display_name = if dev_name.is_empty() {
+                    iface_name.clone()
+                } else {
+                    dev_name
+                };
+
+                discovered.push(AudioDevice {
+                    id,
+                    name: display_name,
+                    driver: iface_name,
+                    active: false,
+                    last_activity: None,
+                });
+            }
+            Ok(())
+        })();
+
+        if let Err(e) = enumeration_result {
+            tracing::warn!("Audio device enumeration failed: {e:?}");
+        }
+
+        for device in &discovered {
+            self.add_device(device.clone());
+        }
+
+        unsafe { CoUninitialize() };
+
+        discovered
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn enumerate_audio_devices(&mut self) -> Vec<AudioDevice> {
+        Vec::new()
+    }
 }
 
 #[async_trait]
@@ -392,5 +492,27 @@ mod tests {
         assert_eq!(events.len(), 3);
         assert_eq!(events[1].event_type, AudioEventType::RecordingStarted);
         assert_eq!(events[2].event_type, AudioEventType::RecordingStopped);
+    }
+
+    #[test]
+    fn test_enumerate_audio_devices_returns_vec() {
+        let mut collector = AudioCollector::new(test_bus());
+        let _devices = collector.enumerate_audio_devices();
+        #[cfg(not(target_os = "windows"))]
+        assert!(devices.is_empty());
+        #[cfg(not(target_os = "windows"))]
+        assert_eq!(collector.device_count(), 0);
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn test_enumerate_audio_devices_discovers() {
+        let mut collector = AudioCollector::new(test_bus());
+        let devices = collector.enumerate_audio_devices();
+        for d in &devices {
+            assert!(!d.id.is_empty());
+            assert!(!d.name.is_empty());
+        }
+        assert_eq!(collector.device_count(), devices.len());
     }
 }

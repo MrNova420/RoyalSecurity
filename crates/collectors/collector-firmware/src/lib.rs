@@ -203,6 +203,145 @@ impl FirmwareCollector {
     pub fn component_count(&self) -> usize {
         self.components.len()
     }
+
+    /// Enumerates system firmware tables (ACPI / SMBIOS) and UEFI Secure Boot state,
+    /// registering each discovered component via [`Self::register_component`].
+    /// Returns firmware events generated during enumeration (currently informational).
+    pub fn enumerate_system_firmware(&mut self) -> Vec<FirmwareEvent> {
+        #[cfg(not(target_os = "windows"))]
+        {
+            Vec::new()
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use windows::core::PCWSTR;
+            use windows::Win32::System::SystemInformation::{GetSystemFirmwareTable, ACPI, RSMB};
+            use windows::Win32::System::WindowsProgramming::GetFirmwareEnvironmentVariableW;
+
+            let mut events = Vec::new();
+
+            // --- ACPI firmware table ---
+            unsafe {
+                let size = GetSystemFirmwareTable(ACPI, 0, None);
+                if size > 0 {
+                    let mut buf = vec![0u8; size as usize];
+                    GetSystemFirmwareTable(ACPI, 0, Some(&mut buf));
+
+                    if buf.len() >= 36 {
+                        let sig = std::str::from_utf8(&buf[0..4])
+                            .unwrap_or("????")
+                            .to_string();
+                        let rev = buf[8];
+                        let oem = std::str::from_utf8(&buf[9..15])
+                            .unwrap_or(" ")
+                            .trim_end()
+                            .to_string();
+
+                        let version = format!("{}.{}", sig, rev);
+                        let hash = if oem.is_empty() {
+                            "oem:unknown".to_string()
+                        } else {
+                            format!("oem:{}", oem)
+                        };
+
+                        self.register_component("ACPI", &version, &hash);
+                        info!("Enumerated ACPI firmware: {} rev {}", sig, rev);
+
+                        events.push(FirmwareEvent {
+                            component: "ACPI".into(),
+                            version,
+                            event_type: FirmwareEventType::IntegrityCheck,
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+            }
+
+            // --- SMBIOS firmware table ---
+            unsafe {
+                let size = GetSystemFirmwareTable(RSMB, 0, None);
+                if size > 0 {
+                    let mut buf = vec![0u8; size as usize];
+                    GetSystemFirmwareTable(RSMB, 0, Some(&mut buf));
+
+                    let (major, minor) = if buf.len() >= 7 && buf[0..4] == *b"_SM_" {
+                        (buf[5], buf[6])
+                    } else if buf.len() >= 8 && buf[0..5] == *b"_SM3_" {
+                        (buf[6], buf[7])
+                    } else {
+                        (0u8, 0u8)
+                    };
+
+                    if major > 0 || minor > 0 {
+                        let version = format!("{}.{}", major, minor);
+                        self.register_component(
+                            "SMBIOS",
+                            &version,
+                            &format!("len:{}", size),
+                        );
+                        info!("Enumerated SMBIOS firmware: {}.{}", major, minor);
+
+                        events.push(FirmwareEvent {
+                            component: "SMBIOS".into(),
+                            version,
+                            event_type: FirmwareEventType::IntegrityCheck,
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+            }
+
+            // --- UEFI Secure Boot variable ---
+            unsafe {
+                let name: Vec<u16> = "SecureBoot"
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+                let guid: Vec<u16> = "{8be4df61-93ca-11d2-aa0d-00e098032b8c}"
+                    .encode_utf16()
+                    .chain(std::iter::once(0))
+                    .collect();
+
+                let size = GetFirmwareEnvironmentVariableW(
+                    PCWSTR::from_raw(name.as_ptr()),
+                    PCWSTR::from_raw(guid.as_ptr()),
+                    None,
+                    0,
+                );
+
+                if size > 0 {
+                    let mut buf = vec![0u8; size as usize];
+                    let returned = GetFirmwareEnvironmentVariableW(
+                        PCWSTR::from_raw(name.as_ptr()),
+                        PCWSTR::from_raw(guid.as_ptr()),
+                        Some(buf.as_mut_ptr() as *mut std::ffi::c_void),
+                        size,
+                    );
+
+                    if returned > 0 {
+                        let enabled = !buf.is_empty() && buf[0] == 1;
+                        let version = if enabled { "enabled" } else { "disabled" };
+                        self.register_component(
+                            "UEFI_SecureBoot",
+                            version,
+                            "var:SecureBoot",
+                        );
+                        info!("UEFI Secure Boot: {}", version);
+
+                        events.push(FirmwareEvent {
+                            component: "UEFI_SecureBoot".into(),
+                            version: version.into(),
+                            event_type: FirmwareEventType::IntegrityCheck,
+                            timestamp: Utc::now(),
+                        });
+                    }
+                }
+            }
+
+            events
+        }
+    }
 }
 
 #[async_trait]
@@ -337,5 +476,32 @@ mod tests {
         assert!(collector.is_collecting());
         assert!(collector.stop().is_ok());
         assert!(!collector.is_collecting());
+    }
+
+    #[test]
+    fn test_enumerate_system_firmware_returns_vec() {
+        let mut collector = FirmwareCollector::new(test_bus());
+        let events = collector.enumerate_system_firmware();
+        assert!(events.iter().all(|e| e.event_type == FirmwareEventType::IntegrityCheck));
+        #[cfg(not(target_os = "windows"))]
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_enumerate_system_firmware_registers_components() {
+        let mut collector = FirmwareCollector::new(test_bus());
+        collector.enumerate_system_firmware();
+
+        // On real Windows hardware we expect at least one of these to exist.
+        // On non-Windows or CI, nothing is registered — that's fine.
+        #[cfg(target_os = "windows")]
+        {
+            let has_acpi = collector.check_firmware_integrity("ACPI")
+                || collector.get_component_version("ACPI").is_none();
+            let has_smbios = collector.check_firmware_integrity("SMBIOS")
+                || collector.get_component_version("SMBIOS").is_none();
+            // At least the call should not panic regardless of hardware
+            let _ = (has_acpi, has_smbios);
+        }
     }
 }

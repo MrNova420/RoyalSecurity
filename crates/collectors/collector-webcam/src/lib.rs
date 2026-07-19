@@ -161,6 +161,88 @@ impl WebcamCollector {
         self.events.write().await.clear();
         debug!("Webcam collector cleared all events");
     }
+
+    #[cfg(target_os = "windows")]
+    pub fn enumerate_camera_devices(&self) -> Vec<WebcamEvent> {
+        use windows::Win32::Devices::DeviceAndDriverInstallation::{
+            SetupDiDestroyDeviceInfoList, SetupDiEnumDeviceInfo, SetupDiGetClassDevsW,
+            SetupDiGetDeviceRegistryPropertyW, SP_DEVINFO_DATA, DIGCF_PRESENT, SPDRP_DEVICEDESC,
+        };
+        const KSCATEGORY_VIDEO_CAMERA: windows::core::GUID = windows::core::GUID {
+            data1: 0xE5323777,
+            data2: 0xF976,
+            data3: 0x4f5b,
+            data4: [0x9B, 0x55, 0xB9, 0x46, 0x99, 0xC4, 0x6E, 0x44],
+        };
+
+        let mut devices = Vec::new();
+
+        unsafe {
+            let dev_info_set = match SetupDiGetClassDevsW(
+                Some(&KSCATEGORY_VIDEO_CAMERA),
+                windows::core::PCWSTR::null(),
+                None,
+                DIGCF_PRESENT,
+            ) {
+                Ok(set) => set,
+                Err(e) => {
+                    debug!("SetupDiGetClassDevsW for camera failed: {}", e);
+                    return devices;
+                }
+            };
+
+            let mut index = 0u32;
+            loop {
+                let mut dev_info_data: SP_DEVINFO_DATA = std::mem::zeroed();
+                dev_info_data.cbSize = std::mem::size_of::<SP_DEVINFO_DATA>() as u32;
+
+                if SetupDiEnumDeviceInfo(dev_info_set, index, &mut dev_info_data).is_err() {
+                    break;
+                }
+                index += 1;
+
+                let mut desc_buf = [0u8; 512];
+                let device_name = if SetupDiGetDeviceRegistryPropertyW(
+                    dev_info_set,
+                    &dev_info_data,
+                    SPDRP_DEVICEDESC,
+                    None,
+                    Some(&mut desc_buf),
+                    None,
+                )
+                .is_ok()
+                {
+                    let wide = std::slice::from_raw_parts(
+                        desc_buf.as_ptr() as *const u16,
+                        desc_buf.len() / 2,
+                    );
+                    let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
+                    String::from_utf16_lossy(&wide[..len])
+                } else {
+                    "Unknown Camera".to_string()
+                };
+
+                info!("Enumerated camera device: {}", device_name);
+                devices.push(WebcamEvent {
+                    device_name,
+                    process_name: "system".to_string(),
+                    pid: 0,
+                    event_type: WebcamEventType::AccessGranted,
+                    timestamp: Utc::now(),
+                });
+            }
+
+            let _ = SetupDiDestroyDeviceInfoList(dev_info_set);
+        }
+
+        devices
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn enumerate_camera_devices(&self) -> Vec<WebcamEvent> {
+        debug!("Camera enumeration not supported on this platform");
+        Vec::new()
+    }
 }
 
 impl Default for WebcamCollector {
@@ -274,6 +356,33 @@ mod tests {
         assert_eq!(collector.event_count().await, 1);
         collector.clear().await;
         assert_eq!(collector.event_count().await, 0);
+    }
+
+    #[test]
+    fn test_enumerate_camera_devices_returns_vec() {
+        let collector = WebcamCollector::new();
+        let devices = collector.enumerate_camera_devices();
+        let _ = devices;
+    }
+
+    #[test]
+    fn test_enumerate_camera_devices_event_fields() {
+        let collector = WebcamCollector::new();
+        let devices = collector.enumerate_camera_devices();
+        for device in &devices {
+            assert!(!device.device_name.is_empty());
+            assert_eq!(device.process_name, "system");
+            assert_eq!(device.pid, 0);
+        }
+    }
+
+    #[test]
+    fn test_enumerate_camera_devices_type() {
+        let collector = WebcamCollector::new();
+        let devices = collector.enumerate_camera_devices();
+        for device in &devices {
+            assert_eq!(device.event_type, WebcamEventType::AccessGranted);
+        }
     }
 }
 
