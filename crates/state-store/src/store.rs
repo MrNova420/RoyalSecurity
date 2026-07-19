@@ -157,6 +157,20 @@ impl StateStore {
         Ok(table.len()? as usize)
     }
 
+    pub fn get_recent_events(&self, limit: usize) -> Result<Vec<StoredEvent>, Box<dyn std::error::Error + Send + Sync>> {
+        let txn = self.db.begin_read()?;
+        let table = txn.open_table(EVENTS_TABLE)?;
+        let mut events: Vec<StoredEvent> = Vec::new();
+        for item in table.iter()? {
+            let (_, data) = item?;
+            let event: StoredEvent = bincode::deserialize(data.value())?;
+            events.push(event);
+        }
+        events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        events.truncate(limit);
+        Ok(events)
+    }
+
     pub fn clear_events(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let txn = self.db.begin_write()?;
         {

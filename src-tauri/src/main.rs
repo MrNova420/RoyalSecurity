@@ -1110,15 +1110,77 @@ async fn get_mitre_techniques() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn export_siem_events(
+    state: State<'_, AppState>,
     format: Option<String>,
     limit: Option<usize>,
 ) -> Result<serde_json::Value, String> {
     let fmt = format.unwrap_or_else(|| "json".to_string());
+    let limit = limit.unwrap_or(1000);
+
+    let stored_events = state
+        .store
+        .get_recent_events(limit)
+        .map_err(|e| e.to_string())?;
+
+    let envelopes: Vec<SecurityEventEnvelope> = stored_events
+        .into_iter()
+        .filter_map(|se| {
+            let id = uuid::Uuid::parse_str(&se.id).ok()?;
+            let ts = chrono::DateTime::parse_from_rfc3339(&se.timestamp)
+                .ok()?
+                .with_timezone(&chrono::Utc);
+            let severity: royalsecurity_common::types::EventSeverity =
+                se.severity.parse().ok()?;
+            let event_type: royalsecurity_common::types::EventType =
+                se.event_type.parse().ok()?;
+            let payload: SecurityEvent =
+                serde_json::from_value(se.data.clone()).unwrap_or(SecurityEvent::Process(ProcessInfo::default()));
+            Some(SecurityEventEnvelope {
+                id,
+                severity,
+                event_type,
+                timestamp: ts,
+                source: se.source,
+                raw: None,
+                details: HashMap::new(),
+                payload,
+            })
+        })
+        .collect();
+
+    let mut buf: Vec<u8> = Vec::new();
+    match fmt.as_str() {
+        "ecs" => {
+            let formatter = royalsecurity_siem_export::EcsNdjsonFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+        "cef" => {
+            let formatter = royalsecurity_siem_export::CefFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+        "syslog" => {
+            let formatter = royalsecurity_siem_export::SyslogFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+        "csv" => {
+            let formatter = royalsecurity_siem_export::CsvFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+        "splunk" => {
+            let formatter = royalsecurity_siem_export::SplunkHecFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+        _ => {
+            let formatter = royalsecurity_siem_export::JsonFormatter::new();
+            formatter.format_batch(&envelopes, &mut buf).map_err(|e| e.to_string())?;
+        }
+    }
+
+    let output = String::from_utf8_lossy(&buf).to_string();
     Ok(serde_json::json!({
         "format": fmt,
-        "message": format!("SIEM export configured for {} format", fmt),
-        "supported_format": ["json", "ecs", "cef", "syslog", "csv", "splunk"],
-        "limit": limit.unwrap_or(1000),
+        "event_count": envelopes.len(),
+        "output": output,
     }))
 }
 

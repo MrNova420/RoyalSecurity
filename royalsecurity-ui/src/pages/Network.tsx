@@ -78,11 +78,12 @@ export default function NetworkPage() {
   });
   const topPorts = Object.entries(portCounts).sort((a, b) => b[1].count - a[1].count).slice(0, 5);
 
-  const trafficData = Array.from({ length: 24 }, (_, i) => ({
-    hour: `${String(i).padStart(2, '0')}:00`,
-    inbound: connections.filter(c => { const h = new Date().getHours(); return Math.abs(h - i) < 2 && c.direction === 'inbound'; }).length * 50 + Math.floor(Math.random() * 100),
-    outbound: connections.filter(c => { const h = new Date().getHours(); return Math.abs(h - i) < 2 && c.direction === 'outbound'; }).length * 30 + Math.floor(Math.random() * 50),
-  }));
+  const trafficData = Array.from({ length: 24 }, (_, i) => {
+    const hourLabel = `${String(i).padStart(2, '0')}:00`;
+    const inbound = connections.filter(c => c.direction === 'inbound' && new Date(c.id).getHours() === i).length || (i === new Date().getHours() ? inboundCount : 0);
+    const outbound = connections.filter(c => c.direction === 'outbound' && new Date(c.id).getHours() === i).length || (i === new Date().getHours() ? outboundCount : 0);
+    return { hour: hourLabel, inbound, outbound };
+  });
 
   if (loading) {
     return (

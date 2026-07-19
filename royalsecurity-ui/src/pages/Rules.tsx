@@ -136,12 +136,12 @@ export default function Rules() {
     if (!hasTitle || !hasDetection || !hasCondition) {
       setCompileResult({
         success: false,
-        message: 'Compilation failed: Missing required fields (title, detection, condition).',
+        message: 'Preview validation failed: Missing required fields (title, detection, condition). Full compilation happens when saving.',
       });
     } else {
       setCompileResult({
         success: true,
-        message: `Rule compiled successfully. ${editorContent.split('\n').length} lines processed. Ready for deployment.`,
+        message: `Preview validation passed. ${editorContent.split('\n').length} lines. Full compilation happens when saving.`,
       });
     }
   };

@@ -3,7 +3,7 @@ import {
   Settings, Save, Shield, Server, Activity, Network,
   Database, FileSearch, Cpu, CheckCircle, AlertTriangle, RefreshCw
 } from 'lucide-react';
-import { getConfig, updateConfig, triggerScan } from '../lib/tauri-bridge';
+import { getConfig, updateConfig, triggerScan, updateConfigField } from '../lib/tauri-bridge';
 import type { Config } from '../lib/tauri-bridge';
 
 interface ModuleConfig {
@@ -73,14 +73,28 @@ export default function SettingsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleModule = (id: string) => {
+  const toggleModule = async (id: string) => {
+    const target = modules.find(m => m.id === id);
+    if (!target) return;
+    const newEnabled = !target.enabled;
     setModules((prev) =>
       prev.map((m) =>
         m.id === id
-          ? { ...m, enabled: !m.enabled, status: !m.enabled ? 'running' : 'stopped' }
+          ? { ...m, enabled: newEnabled, status: newEnabled ? 'running' : 'stopped' }
           : m
       )
     );
+    try {
+      await updateConfigField(`defense.${id}_enabled`, newEnabled);
+    } catch {
+      setModules((prev) =>
+        prev.map((m) =>
+          m.id === id
+            ? { ...m, enabled: target.enabled, status: target.status }
+            : m
+        )
+      );
+    }
   };
 
   const handleSave = async () => {

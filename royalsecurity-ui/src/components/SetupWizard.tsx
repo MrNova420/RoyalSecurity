@@ -4,7 +4,7 @@ import {
   Search, Server, Activity, Network, FileSearch, Database,
   Cpu, Lock, Eye, Radio, Globe, Settings, Zap
 } from 'lucide-react';
-import { getSystemInfo, getConfig, updateConfig } from '../lib/tauri-bridge';
+import { getSystemInfo, getConfig, updateConfig, getTpmStatus, getPplStatus } from '../lib/tauri-bridge';
 import type { SystemInfo, Config } from '../lib/tauri-bridge';
 
 interface Step {
@@ -68,16 +68,23 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   useEffect(() => {
     const fetchSystemInfo = async () => {
       try {
-        const info = await getSystemInfo();
-        setSystemInfo(info);
+        const [info, tpmResult, pplResult] = await Promise.allSettled([
+          getSystemInfo(),
+          getTpmStatus(),
+          getPplStatus(),
+        ]);
+        if (info.status === 'fulfilled') {
+          setSystemInfo(info.value);
+        } else {
+          setSystemInfo({ hostname: 'Unknown', os: 'Windows', arch: 'x86_64', version: 'N/A', agent_name: 'RoyalSecurity' });
+        }
+        setTpmAvailable(tpmResult.status === 'fulfilled' ? tpmResult.value.available : false);
+        setPplEnabled(pplResult.status === 'fulfilled' ? pplResult.value.enabled : false);
       } catch {
         setSystemInfo({ hostname: 'Unknown', os: 'Windows', arch: 'x86_64', version: 'N/A', agent_name: 'RoyalSecurity' });
-      }
-      setTimeout(() => {
-        setTpmAvailable(Math.random() > 0.3);
-        setPplEnabled(Math.random() > 0.4);
+      } finally {
         setScanning(false);
-      }, 1500);
+      }
     };
     fetchSystemInfo();
   }, []);

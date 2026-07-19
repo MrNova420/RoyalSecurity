@@ -249,6 +249,10 @@ export async function blockIp(ip: string) {
   return invokeCommand<{ success: boolean; message: string }>('block_ip', { ip });
 }
 
+export async function getDetectionRules() {
+  return invokeCommand<{ sigma_rules: number; dsl_rules: number; yara_rules: number; total: number }>('get_detection_rules');
+}
+
 export async function removeDetectionRule(ruleId: string) {
   return invokeCommand<{ success: boolean; message: string }>('remove_detection_rule', { ruleId });
 }

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import {
   getSystemInfo, getModuleHealth, getAlertStats, getMitreCoverage,
-  getComplianceStatus, getEvents
+  getComplianceStatus, getEvents, getDetectionRules
 } from '../lib/tauri-bridge';
 
 function StatCard({ title, value, icon: Icon, color, subtitle }: { title: string; value: string | number; icon: any; color: string; subtitle?: string }) {
@@ -50,13 +50,14 @@ export default function Dashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [sysInfo, health, alertStats, mitreData, compData, events] = await Promise.allSettled([
+      const [sysInfo, health, alertStats, mitreData, compData, events, detectionRules] = await Promise.allSettled([
         getSystemInfo(),
         getModuleHealth(),
         getAlertStats(),
         getMitreCoverage(),
         getComplianceStatus(),
         getEvents(50),
+        getDetectionRules(),
       ]);
 
       if (sysInfo.status === 'fulfilled') {
@@ -124,6 +125,11 @@ export default function Dashboard() {
         });
         setEventsOverTime(Object.entries(bucketed).map(([hour, data]) => ({ hour, ...data })));
         if (recentList.length > 0) setRecentAlerts(recentList);
+      }
+
+      if (detectionRules.status === 'fulfilled') {
+        const r = detectionRules.value;
+        setRuleCounts({ sigma: r.sigma_rules, yara: r.yara_rules, snort: r.dsl_rules, custom: 0 });
       }
     } catch {
       // Use defaults
