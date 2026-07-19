@@ -176,6 +176,7 @@ windows = { version = "0.58", features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_NetworkManagement_WiFi",
+    "Win32_NetworkManagement_WindowsFilteringPlatform",
     "Win32_Networking_WinSock",
     "Win32_Storage_FileSystem",
     "Win32_Storage_IscsiDisc",
